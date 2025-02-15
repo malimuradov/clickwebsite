@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ClickButton from './ClickButton';
 import io from 'socket.io-client';
 
-const socket = io('http://52.59.228.62:4000');
+const socket = io('/');
 function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, bestCPS: propBestCPS }) {
   const [count, setCount] = useState(0);
   const [clientCPS, setClientCPS] = useState(0);
