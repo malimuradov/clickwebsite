@@ -1,5 +1,5 @@
 -- Connect to the correct database
-\c worldclicker_db
+\c webclicker_db
 
 -- Create tables
 CREATE TABLE users (
