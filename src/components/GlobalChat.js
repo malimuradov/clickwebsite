@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import '../styles/GlobalChat.css'; // We'll create this file for styling
+import '../styles/GlobalChat.css';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
@@ -9,7 +9,10 @@ const socket = io(socketUrl);
 function GlobalChat({ totalClicks, onSendMessage }) {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const messageCost = 100; // Cost in clicks to send a message
+  const [username, setUsername] = useState(`User${Math.floor(Math.random() * 10000)}`);
+  const [isChangingUsername, setIsChangingUsername] = useState(false);
+  const messageCost = 100;
+  const usernameCost = 5000;
   const chatContainerRef = useRef(null);
 
   useEffect(() => {
@@ -42,18 +45,48 @@ function GlobalChat({ totalClicks, onSendMessage }) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (inputMessage.trim() && totalClicks >= messageCost) {
       onSendMessage(messageCost);
-      socket.emit('chat message', inputMessage);
+      socket.emit('chat message', { message: inputMessage, username });
       setInputMessage('');
     }
   };
 
+  const handleUsernameChange = (e) => {
+    e.preventDefault();
+    if (totalClicks >= usernameCost) {
+      onSendMessage(usernameCost);
+      setUsername(inputMessage);
+      setInputMessage('');
+      setIsChangingUsername(false);
+    }
+  };
   return (
     <div className="global-chat">
       <h3>Global Chat</h3>
+      <div className="username-section">
+        <span>Your username: {username}</span>
+        <button onClick={() => setIsChangingUsername(!isChangingUsername)}>
+          {isChangingUsername ? 'Cancel' : 'Change Username'}
+        </button>
+      </div>
+      {isChangingUsername && (
+        <form onSubmit={handleUsernameChange} className="username-form">
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder="New username..."
+            className="username-input"
+          />
+          <button type="submit" disabled={totalClicks < usernameCost} className="username-change-button">
+            Change ({usernameCost} clicks)
+          </button>
+        </form>
+      )}
       <div className="chat-container" ref={chatContainerRef}>
         {messages.map((msg, index) => (
           <div key={index} className="chat-message">
