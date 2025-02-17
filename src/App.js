@@ -3,6 +3,7 @@ import Clicker from './components/Clicker';
 import UnlockedContent from './components/UnlockedContent';
 import DrawingCanvas from './components/DrawingCanvas';
 import Settings from './components/Settings';
+import GlobalChat from './components/GlobalChat';
 import './App.css';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
   const [flatAutoClicker, setFlatAutoClicker] = useState(0);
   const [percentAutoClicker, setPercentAutoClicker] = useState(0);
   const [gamblingUnlocked, setGamblingUnlocked] = useState(false);
+  const [chatUnlocked, setChatUnlocked] = useState(false);
 
 
 
@@ -65,6 +67,16 @@ function App() {
     }
     setIsLoaded(true);
   }, []);
+
+  const handleUnlockChat = useCallback(() => {
+    setChatUnlocked(true);
+  }, []);
+
+  const handleSendMessage = useCallback((cost) => {
+    if (totalClicks >= cost) {
+      setTotalClicks(prevClicks => prevClicks - cost);
+    }
+  }, [totalClicks]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -153,6 +165,9 @@ function App() {
             onUnlockGambling={handleUnlockGambling}
             gamblingUnlocked={gamblingUnlocked}
             onGamble={handleGamble}
+            onUnlockChat={handleUnlockChat}
+            chatUnlocked={chatUnlocked}
+            onSendMessage={handleSendMessage}
             />
           ) : null}
         </div>

@@ -4,7 +4,11 @@ const express = require('express');
 const socketIo = require('socket.io');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const db = require('./db');
+
+// DEVELOPMENT MODE
+const isDevelopment = process.env.NODE_ENV === 'development';
+// Only require db if not in development mode
+const db = isDevelopment ? null : require('./db');
 
 const fs = require('fs');
 const path = require('path');
@@ -14,7 +18,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://52.59.228.62:8080",
+    origin: isDevelopment ? "http://localhost:3000" : "http://52.59.228.62:8080",
     methods: ["GET", "POST"]
   }
 });
@@ -23,6 +27,8 @@ let clickCount = 0;
 let clicks = [];
 let uniqueUsers = new Set();
 let userClicks = new Map(); // Store user clicks in memory
+let recentMessages = [];
+
 
 function updateGlobalCPS() {
     const now = Date.now();
@@ -33,8 +39,24 @@ function updateGlobalCPS() {
 
 setInterval(updateGlobalCPS, 100);
 
+// Function to update all users with online count and recent messages
+function updateAllUsers() {
+  io.emit('updateOnlineUsers', uniqueUsers.size);
+  io.emit('updateRecentMessages', recentMessages);
+  // Remove old messages older than 1 minute
+  const oneMinuteAgo = Date.now() - 60000; // 1 minute ago
+  recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
+}
+// Set interval to update all users every 5 seconds
+setInterval(updateAllUsers, 5000);
+
+
 // Function to sync total clicks with the database
 async function syncTotalClicksWithDB() {
+  if (isDevelopment) {
+    console.log('Development mode: Skipping database sync');
+    return;
+  }
   try {
     const result = await db.query('SELECT SUM(total_clicks) as total_clicks FROM progress');
     clickCount = parseInt(result.rows[0].total_clicks) || 0;
@@ -47,6 +69,10 @@ async function syncTotalClicksWithDB() {
 
 // Function to sync user clicks with the database
 async function syncUserClicksWithDB() {
+  if (isDevelopment) {
+    console.log('Development mode: Skipping user clicks sync');
+    return;
+  }
   for (const [userId, clicks] of userClicks.entries()) {
     if (clicks > 0) {
       try {
@@ -64,6 +90,7 @@ setInterval(syncTotalClicksWithDB, 30000);
 
 // Sync user clicks with DB every 10 seconds
 setInterval(syncUserClicksWithDB, 10000);
+
 io.on('connection', (socket) => {
   console.log('New client connected');
   uniqueUsers.add(socket.id);
@@ -74,6 +101,7 @@ io.on('connection', (socket) => {
 
   // Emit the current number of online users to all clients
   io.emit('updateOnlineUsers', uniqueUsers.size);
+  socket.emit('updateRecentMessages', recentMessages);
 
   socket.on('incrementCount', (userId) => {
     clickCount++;
@@ -85,6 +113,16 @@ io.on('connection', (socket) => {
       userClicks.set(userId, userClickCount);
     }
     io.emit('updateCount', clickCount);
+  });
+
+  // Chat functionality
+  socket.on('chat message', (msg) => {
+    const messageWithTimestamp = {
+      ...msg,
+      timestamp: Date.now()
+    };
+    recentMessages.push(messageWithTimestamp);
+    io.emit('chat message', messageWithTimestamp);
   });
 
   socket.on('syncUserClicks', (userId) => {

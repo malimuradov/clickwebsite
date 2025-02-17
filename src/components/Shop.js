@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 
-function Shop({ totalClicks, onPurchase, onUpgrade, bestCPS, flatAutoClicker, percentAutoClicker, onUnlockGambling }) {
+function Shop({ 
+  totalClicks, 
+  onPurchase, 
+  onUpgrade, 
+  bestCPS, 
+  flatAutoClicker, 
+  percentAutoClicker, 
+  onUnlockGambling,
+  onUnlockChat,
+  chatUnlocked
+}) {
     const [items, setItems] = useState([
       { id: 1, name: "Cursor Upgrade", cost: 50, owned: 0 },
       { id: 2, name: "Flat Auto Clicker", cost: 100, owned: 0, effect: 0 },
@@ -9,6 +19,7 @@ function Shop({ totalClicks, onPurchase, onUpgrade, bestCPS, flatAutoClicker, pe
       { id: 5, name: "Percentage Click Bonus", cost: 500, owned: 0 },
       // Temporarily disabled: { id: 6, name: "Drawing Tool", cost: 1000, owned: 0 }
       { id: 6, name: "Unlock Gambling", cost: 1000, owned: 0 },
+      { id: 7, name: "Unlock Global Chat", cost: 500, owned: 0 },
     ]);
 
     useEffect(() => {
@@ -54,6 +65,11 @@ function Shop({ totalClicks, onPurchase, onUpgrade, bestCPS, flatAutoClicker, pe
           case 6: // Unlock Gambling
             if (item.owned === 0) {
               onUnlockGambling();
+            }
+            break;
+          case 7: // Unlock Global Chat
+            if (item.owned === 0) {
+              onUnlockChat();
             }
             break;
         }
