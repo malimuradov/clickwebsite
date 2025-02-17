@@ -20,8 +20,6 @@ function UnlockedContent({
 }) {
   return (
     <div>
-      <h2>Congratulations! You've unlocked the secret content!</h2>
-      <p>You can now use your clicks to purchase items from the shop and try your luck with gambling.</p>
       <div className="content-grid">
         <div className="shop-section">
           <Shop 

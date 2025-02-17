@@ -1,0 +1,140 @@
+.cursor-upgrade-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  max-width: 80%;
+  max-height: 80%;
+  overflow-y: auto;
+}
+
+.cursor-upgrade-popup .popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.cursor-upgrade-popup .popup-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+
+.cursor-upgrade-popup .popup-tabs button {
+  padding: 10px 20px;
+  border: none;
+  cursor: pointer;
+  margin-right: 5px;
+  border-radius: 5px 5px 0 0;
+  font-size: 14px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.cursor-upgrade-popup .popup-tabs button.active {
+  font-weight: bold;
+}
+
+.cursor-upgrade-popup .tab-common { background-color: #f0f0f0; color: #333; }
+.cursor-upgrade-popup .tab-rare { background-color: #4287f5; color: white; }
+.cursor-upgrade-popup .tab-epic { background-color: #9b4dca; color: white; }
+.cursor-upgrade-popup .tab-legendary { background-color: #ffd700; color: #333; }
+.cursor-upgrade-popup .tab-mythic {
+  background: linear-gradient(45deg, #ff00ff, #00ffff, #ff00ff);
+  background-size: 200% 200%;
+  animation: gradient 5s ease infinite;
+  color: white;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.cursor-upgrade-popup .upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.cursor-upgrade-popup .upgrade-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.cursor-upgrade-popup .upgrade-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.cursor-upgrade-popup .upgrade-grid.common .upgrade-item { background-color: #f9f9f9; }
+.cursor-upgrade-popup .upgrade-grid.rare .upgrade-item { background-color: #e6f0ff; }
+.cursor-upgrade-popup .upgrade-grid.epic .upgrade-item { background-color: #f3e6ff; }
+.cursor-upgrade-popup .upgrade-grid.legendary .upgrade-item { background-color: #fffae6; }
+.cursor-upgrade-popup .upgrade-grid.mythic .upgrade-item {
+  background: linear-gradient(45deg, #ff00ff22, #00ffff22, #ff00ff22);
+  background-size: 200% 200%;
+  animation: gradient 5s ease infinite;
+}
+
+.cursor-upgrade-popup .upgrade-icon {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.cursor-upgrade-popup .upgrade-name {
+  font-weight: bold;
+  margin-bottom: 5px;
+  text-align: center;
+}
+
+.cursor-upgrade-popup .upgrade-effect,
+.cursor-upgrade-popup .upgrade-cost {
+  margin-bottom: 5px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.cursor-upgrade-popup .upgrade-item button {
+  margin-top: 10px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background-color: #4CAF50;
+  color: white;
+  transition: background-color 0.3s;
+}
+
+.cursor-upgrade-popup .upgrade-item button:hover {
+  background-color: #45a049;
+}
+
+.cursor-upgrade-popup .upgrade-item button:disabled {
+  background-color: #ddd;
+  cursor: not-allowed;
+}
+
+.cursor-upgrade-popup .upgrade-item button.equipped {
+  background-color: #2196F3;
+}
+
+.cursor-upgrade-popup .upgrade-item button.equipped:hover {
+  background-color: #1e87db;
+}
+
+.cursor-upgrade-popup .upgrade-item.owned .upgrade-cost {
+  display: none;
+}
+
