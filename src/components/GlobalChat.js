@@ -6,10 +6,9 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
 const socket = io(socketUrl);
 
-function GlobalChat({ totalClicks, onSendMessage }) {
+function GlobalChat({ totalClicks, onSendMessage, username, onUsernameChange }) {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [username, setUsername] = useState(`User${Math.floor(Math.random() * 10000)}`);
   const [isChangingUsername, setIsChangingUsername] = useState(false);
   const messageCost = 100;
   const usernameCost = 5000;
@@ -59,11 +58,12 @@ function GlobalChat({ totalClicks, onSendMessage }) {
     e.preventDefault();
     if (totalClicks >= usernameCost) {
       onSendMessage(usernameCost);
-      setUsername(inputMessage);
+      onUsernameChange(inputMessage);
       setInputMessage('');
       setIsChangingUsername(false);
     }
   };
+
   return (
     <div className="global-chat">
       <h3>Global Chat</h3>

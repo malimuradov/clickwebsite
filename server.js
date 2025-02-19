@@ -28,7 +28,7 @@ let clicks = [];
 let uniqueUsers = new Set();
 let userClicks = new Map(); // Store user clicks in memory
 let recentMessages = [];
-
+let cursors = {};
 
 function updateGlobalCPS() {
     const now = Date.now();
@@ -43,6 +43,7 @@ setInterval(updateGlobalCPS, 100);
 function updateAllUsers() {
   io.emit('updateOnlineUsers', uniqueUsers.size);
   io.emit('updateRecentMessages', recentMessages);
+  //io.emit('updateCursors', cursors);
   // Remove old messages older than 1 minute
   const oneMinuteAgo = Date.now() - 60000; // 1 minute ago
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
@@ -98,6 +99,19 @@ io.on('connection', (socket) => {
 
   // Send current count to newly connected client
   socket.emit('updateCount', clickCount);
+  socket.emit('updateCursors', cursors);
+
+  socket.on('cursorMove', ({ x, y, username }) => {
+    cursors[socket.id] = { x, y, username };
+    socket.broadcast.emit('updateCursors', cursors);
+  });
+  
+  socket.on('usernameChange', (newUsername) => {
+    if (cursors[socket.id]) {
+      cursors[socket.id].username = newUsername;
+      io.emit('updateCursors', cursors);
+    }
+  });
 
   // Emit the current number of online users to all clients
   io.emit('updateOnlineUsers', uniqueUsers.size);
@@ -136,6 +150,7 @@ io.on('connection', (socket) => {
     uniqueUsers.delete(socket.id);
     console.log('Unique users online:', uniqueUsers.size);
     // Emit the updated number of online users to all clients
+    io.emit('updateCursors', cursors);
     io.emit('updateOnlineUsers', uniqueUsers.size);
   });
 });

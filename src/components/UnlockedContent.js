@@ -8,18 +8,27 @@ function UnlockedContent({
   onPurchase, 
   onUnlockDrawing, 
   onUpgrade, 
-  bestCPS, 
-  flatAutoClicker, 
-  percentAutoClicker, 
-  onUnlockGambling, 
-  gamblingUnlocked, 
+  bestCPS,
+  flatAutoClicker,
+  percentAutoClicker,
+  onUnlockGambling,
+  gamblingUnlocked,
   onGamble,
   onUnlockChat,
   chatUnlocked,
-  onSendMessage
+  onSendMessage,
+  onCursorUpgrade,
+  unlockedCursors,
+  equippedCursor,
+  cursorImage,
+  username,
+  onUsernameChange
 }) {
+
   return (
     <div>
+      <h2>Congratulations! You've unlocked the secret content!</h2>
+      <p>You can now use your clicks to purchase items from the shop, try your luck with gambling, and chat globally.</p>
       <div className="content-grid">
         <div className="shop-section">
           <Shop 
@@ -31,9 +40,11 @@ function UnlockedContent({
             flatAutoClicker={flatAutoClicker}
             percentAutoClicker={percentAutoClicker}
             onUnlockGambling={onUnlockGambling}
-            gamblingUnlocked={gamblingUnlocked}
             onUnlockChat={onUnlockChat}
-            chatUnlocked={chatUnlocked}
+            onCursorUpgrade={onCursorUpgrade}
+            unlockedCursors={unlockedCursors}
+            equippedCursor={equippedCursor}
+            cursorImage={cursorImage}
           />
         </div>
         <div className="gambling-chat-section">
@@ -47,6 +58,8 @@ function UnlockedContent({
             <GlobalChat
               totalClicks={totalClicks}
               onSendMessage={onSendMessage}
+              username={username}
+              onUsernameChange={onUsernameChange}
             />
           )}
         </div>

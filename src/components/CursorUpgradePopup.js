@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/CursorUpgradePopup.css';
 
-function CursorUpgradePopup({ onClose, onUpgrade, totalClicks }) {
+function CursorUpgradePopup({ onClose, onUpgrade, totalClicks, unlockedCursors, equippedCursor }) {
   const [activeTab, setActiveTab] = useState('common');
-  const [equippedCursor, setEquippedCursor] = useState('default');
 
   const cursorUpgrades = {
     common: [
-      { id: 'default', name: 'Default Cursor', cost: 0, effect: 'Standard click power', icon: '🖱️', owned: true },
-      { id: 'wood', name: 'Wooden Cursor', cost: 50, effect: '+1 click power', icon: '🖱️🌳' },
-      { id: 'stone', name: 'Stone Cursor', cost: 100, effect: '+2 click power', icon: '🖱️🪨' },
+      { id: 'default', name: 'Default Cursor', cost: 0, effect: 'Standard click power', icon: '🖱️', cursorImage: null },
+      { id: 'wood', name: 'Wooden Cursor', cost: 50, effect: '+1 click power', icon: '🖱️🌳', cursorImage: '/images/cursorupgraded.png' },
+      { id: 'stone', name: 'Stone Cursor', cost: 100, effect: '+2 click power', icon: '🖱️🪨', cursorImage: 'stone-cursor.png' },
     ],
     rare: [
       { id: 'silver', name: 'Silver Cursor', cost: 500, effect: '+5 click power', icon: '🖱️✨' },
@@ -29,26 +28,30 @@ function CursorUpgradePopup({ onClose, onUpgrade, totalClicks }) {
     ],
   };
 
-  const handleUpgrade = (upgrade) => {
-    if (totalClicks >= upgrade.cost && !upgrade.owned) {
-      onUpgrade(upgrade.id, upgrade.cost);
-      upgrade.owned = true;
-    }
+  const handleUpgrade = (cursorData) => {
+    onUpgrade(cursorData);
   };
 
+
   const handleEquip = (cursorId) => {
-    setEquippedCursor(cursorId);
+    const equippedUpgrade = Object.values(cursorUpgrades)
+      .flat()
+      .find(upgrade => upgrade.id === cursorId);
+
+    if (equippedUpgrade) {
+      onUpgrade(cursorId, 0, equippedUpgrade.cursorImage);
+    }
   };
 
   const renderUpgrades = (category) => (
     <div className={`upgrade-grid ${category}`}>
       {cursorUpgrades[category].map(upgrade => (
-        <div key={upgrade.id} className={`upgrade-item ${upgrade.owned ? 'owned' : ''}`}>
+        <div key={upgrade.id} className={`upgrade-item ${unlockedCursors.includes(upgrade.id) ? 'owned' : ''}`}>
           <span className="upgrade-icon">{upgrade.icon}</span>
           <span className="upgrade-name">{upgrade.name}</span>
           <span className="upgrade-effect">{upgrade.effect}</span>
-          {!upgrade.owned && <span className="upgrade-cost">Cost: {upgrade.cost} clicks</span>}
-          {upgrade.owned ? (
+          {!unlockedCursors.includes(upgrade.id) && <span className="upgrade-cost">Cost: {upgrade.cost} clicks</span>}
+          {unlockedCursors.includes(upgrade.id) ? (
             <button 
               onClick={() => handleEquip(upgrade.id)}
               className={equippedCursor === upgrade.id ? 'equipped' : ''}
@@ -67,6 +70,8 @@ function CursorUpgradePopup({ onClose, onUpgrade, totalClicks }) {
       ))}
     </div>
   );
+
+
   return (
     <div className="cursor-upgrade-popup">
       <div className="popup-header">
@@ -92,3 +97,4 @@ function CursorUpgradePopup({ onClose, onUpgrade, totalClicks }) {
 }
 
 export default CursorUpgradePopup;
+

@@ -4,6 +4,10 @@
   min-height: 100vh;
 }
 
+body {
+  cursor: url('cursorupgraded.png') 0 0, auto;
+}
+
 .App-logo {
   height: 40vmin;
   pointer-events: none;

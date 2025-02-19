@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import '../styles/Shop.css'; // We'll create this CSS file for styling
+import '../styles/Shop.css';
 import CursorUpgradePopup from './CursorUpgradePopup';
 
 function Shop({ 
@@ -12,7 +12,11 @@ function Shop({
   onUnlockGambling,
   onUnlockChat,
   chatUnlocked,
-  gamblingUnlocked
+  gamblingUnlocked,
+  onCursorUpgrade,
+  unlockedCursors,
+  equippedCursor,
+  cursorImage
 }) {
     const [items, setItems] = useState([
       { id: 1, name: "Cursor Upgrade", cost: 50, owned: 0, category: "upgrade", icon: "🖱️" },
@@ -54,9 +58,6 @@ function Shop({
         setItems(updatedItems);
 
         switch(item.id) {
-          case 1: // Cursor Upgrade
-            onUpgrade('cursorUpgrade', 1);
-            break;
           case 2: // Flat Auto Clicker
             onUpgrade('flatAutoClicker', 1);
             break;
@@ -79,12 +80,9 @@ function Shop({
       }
     };
 
-    const handleCursorUpgrade = (upgradeId, cost) => {
-      onPurchase(cost);
-      onUpgrade('cursorUpgrade', 1); // You might want to adjust this based on the specific upgrade
+    const handleCursorUpgrade = (cursorData) => {
+      onUpgrade('cursorUpgrade', null, cursorData);
     };
-
-    
 
     const renderItemGroup = (category) => {
       return items
@@ -106,7 +104,7 @@ function Shop({
         ));
     };
 
-  return (
+    return (
       <div className="shop-component">
         <h3>Shop</h3>
         <p>Your clicks: {totalClicks}</p>
@@ -119,15 +117,18 @@ function Shop({
           {renderItemGroup("unlockable")}
         </div>
         {showCursorPopup && (
-          <CursorUpgradePopup 
+          <CursorUpgradePopup
             onClose={() => setShowCursorPopup(false)}
             onUpgrade={handleCursorUpgrade}
             totalClicks={totalClicks}
+            unlockedCursors={unlockedCursors}
+            equippedCursor={equippedCursor}
+            cursorImage={cursorImage}
           />
         )}
+
       </div>
     );
 }
 
 export default Shop;
-
