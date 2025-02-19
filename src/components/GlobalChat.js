@@ -10,6 +10,7 @@ function GlobalChat({ totalClicks, onSendMessage, username, onUsernameChange }) 
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isChangingUsername, setIsChangingUsername] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const messageCost = 100;
   const usernameCost = 5000;
   const chatContainerRef = useRef(null);
@@ -64,53 +65,66 @@ function GlobalChat({ totalClicks, onSendMessage, username, onUsernameChange }) 
     }
   };
 
+  const toggleMinimize = () => {
+    setIsMinimized(!isMinimized);
+  };
   return (
-    <div className="global-chat">
-      <h3>Global Chat</h3>
-      <div className="username-section">
-        <span>Your username: {username}</span>
-        <button onClick={() => setIsChangingUsername(!isChangingUsername)}>
-          {isChangingUsername ? 'Cancel' : 'Change Username'}
+    <div className={`global-chat ${isMinimized ? 'minimized' : ''}`}>
+      <div className="chat-header">
+        <h3>Global Chat</h3>
+        <button onClick={toggleMinimize}>
+          {isMinimized ? 'Maximize' : 'Minimize'}
         </button>
       </div>
-      {isChangingUsername && (
-        <form onSubmit={handleUsernameChange} className="username-form">
-          <input
-            type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="New username..."
-            className="username-input"
-          />
-          <button type="submit" disabled={totalClicks < usernameCost} className="username-change-button">
-            Change ({usernameCost} clicks)
-          </button>
-        </form>
-      )}
-      <div className="chat-container" ref={chatContainerRef}>
-        {messages.map((msg, index) => (
-          <div key={index} className="chat-message">
-            <span className="username">{msg.username}:</span>
-            <span className="message-text">{msg.message}</span>
-            <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+      {!isMinimized && (
+        <>
+          <div className="username-section">
+            <span>Your username: {username}</span>
+            <button onClick={() => setIsChangingUsername(!isChangingUsername)}>
+              {isChangingUsername ? 'Cancel' : 'Change Username'}
+            </button>
           </div>
-        ))}
-      </div>
-      <form onSubmit={handleSubmit} className="chat-input-form">
-        <input
-          type="text"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          placeholder="Type a message..."
-          className="chat-input"
-        />
-        <button type="submit" disabled={totalClicks < messageCost} className="chat-send-button">
-          Send ({messageCost} clicks)
-        </button>
-      </form>
+          {isChangingUsername && (
+            <form onSubmit={handleUsernameChange} className="username-form">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="New username..."
+                className="username-input"
+              />
+              <button type="submit" disabled={totalClicks < usernameCost} className="username-change-button">
+                Change ({usernameCost} clicks)
+              </button>
+            </form>
+          )}
+          <div className="chat-container" ref={chatContainerRef}>
+            {messages.map((msg, index) => (
+              <div key={index} className="chat-message">
+                <span className="username">{msg.username}:</span>
+                <span className="message-text">{msg.message}</span>
+                <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleSubmit} className="chat-input-form">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="chat-input"
+            />
+            <button type="submit" disabled={totalClicks < messageCost} className="chat-send-button">
+              Send ({messageCost} clicks)
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 }
+
 
 export default GlobalChat;
 

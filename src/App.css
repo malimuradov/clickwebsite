@@ -49,7 +49,10 @@ body {
   pointer-events: none;
 }
 
-.content * {
+.content > *:not(.cursor-overlay) {
   pointer-events: auto;
 }
 
+.cursor-overlay {
+  pointer-events: none !important;
+}

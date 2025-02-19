@@ -23,6 +23,7 @@ const io = socketIo(server, {
   }
 });
 
+const MAX_RECENT_MESSAGES = 50;
 let clickCount = 0;
 let clicks = [];
 let uniqueUsers = new Set();
@@ -53,6 +54,13 @@ function updateAllUsers() {
 }
 // Set interval to update all users every 5 seconds
 setInterval(updateAllUsers, 5000);
+
+function addRecentMessage(message) {
+  recentMessages.push(message);
+  if (recentMessages.length > MAX_RECENT_MESSAGES) {
+    recentMessages.shift(); // Remove the oldest message if we exceed the limit
+  }
+}
 
 
 // Function to sync total clicks with the database
@@ -124,6 +132,20 @@ io.on('connection', (socket) => {
     team.members.forEach(memberId => {
       io.to(memberId).emit('teamUpdate', team);
     });
+  });
+
+  
+  socket.emit('updateRecentMessages', recentMessages);
+
+  socket.on('chat message', (data) => {
+    console.log(`User ${data.username} sent a message: ${data.message}`);
+    const message = {
+      username: data.username,
+      message: data.message,
+      timestamp: Date.now()
+    };
+    addRecentMessage(message);
+    io.emit('chat message', message);
   });
 
   socket.on('leaveTeam', () => {

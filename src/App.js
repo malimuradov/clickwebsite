@@ -4,11 +4,7 @@ import UnlockedContent from './components/UnlockedContent';
 import DrawingCanvas from './components/DrawingCanvas';
 import Settings from './components/Settings';
 import io from 'socket.io-client';
-import CursorOverlay from './components/CursorOverlay';
 import './App.css';
-import OnlineUsers from './components/OnlineUsers';
-import TeamInfo from './components/TeamInfo';
-import TeamInvites from './components/TeamInvites';
 
 function App() {
 const [unlocked, setUnlocked] = useState(false);
@@ -276,10 +272,8 @@ useEffect(() => {
 
 return (
   <div className="App" onMouseMove={handleMouseMove}>
-    <Settings onReset={resetGame} />
-    {drawingUnlocked && <DrawingCanvas />}
-    <CursorOverlay cursors={cursors} username={username}/>
     <div className="content">
+      <Settings onReset={resetGame} />
       <Clicker
         onUnlock={handleUnlock} 
         totalClicks={totalClicks} 
@@ -288,14 +282,6 @@ return (
         bestCPS={bestCPS}
         cursorImage={cursorImage}
       />
-      <OnlineUsers 
-        users={onlineUsers} 
-        onInvite={handleInviteToTeam} 
-        currentUser={username}
-        team={team}
-      />
-      <TeamInvites invites={teamInvites} onAccept={handleAcceptInvite} />
-      {team && <TeamInfo team={team} onLeave={handleLeaveTeam} />}
       {unlocked ? (
         <UnlockedContent
           totalClicks={totalClicks} 
@@ -317,6 +303,13 @@ return (
           equippedCursor={equippedCursor}
           username={username}
           onUsernameChange={handleUsernameChange}
+          cursors={cursors}
+          onlineUsers={onlineUsers}
+          onInvite={handleInviteToTeam}
+          team={team}
+          teamInvites={teamInvites}
+          onAcceptInvite={handleAcceptInvite}
+          onLeaveTeam={handleLeaveTeam}
         />
       ) : null}
     </div>
