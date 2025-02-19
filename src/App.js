@@ -20,11 +20,11 @@ const [percentAutoClicker, setPercentAutoClicker] = useState(0);
 const [gamblingUnlocked, setGamblingUnlocked] = useState(false);
 const [chatUnlocked, setChatUnlocked] = useState(false);
 const [cursorImage, setCursorImage] = useState(null);
-const [unlockedCursors, setUnlockedCursors] = useState(['default']);
-const [equippedCursor, setEquippedCursor] = useState('default');
+const [unlockedCursors, setUnlockedCursors] = useState([]);
+const [equippedCursor, setEquippedCursor] = useState(null);
 const [socket, setSocket] = useState(null);
 const [cursors, setCursors] = useState({});
-const [username, setUsername] = useState(`User${Math.floor(Math.random() * 10000)}`);
+const [username, setUsername] = useState('');
 const [onlineUsers, setOnlineUsers] = useState([]);
 const [team, setTeam] = useState(null);
 const [teamInvites, setTeamInvites] = useState([]);
@@ -76,7 +76,23 @@ useEffect(() => {
       setTeam(newTeam);
     });
 
-    // Emit the username when connecting
+    // Emit the username when connecting, but only if it's not empty
+    if (username) {
+      socket.emit('setUsername', username);
+    }
+
+    // Add a listener for username changes
+    return () => {
+      socket.off('updateOnlineUsers');
+      socket.off('teamInvite');
+      socket.off('teamUpdate');
+    };
+  }
+}, [socket, username]);
+
+// Add a new useEffect to handle username changes
+useEffect(() => {
+  if (socket && username) {
     socket.emit('setUsername', username);
   }
 }, [socket, username]);
@@ -153,15 +169,24 @@ useEffect(() => {
   const storedData = localStorage.getItem('gameState');
   if (storedData) {
     const parsedData = JSON.parse(storedData);
-    setTotalClicks(parsedData.totalClicks);
+    setTotalClicks(parsedData.totalClicks || 0);
     setUnlocked(parsedData.totalClicks >= 100);
-    setDrawingUnlocked(parsedData.drawingUnlocked);
-    setBestCPS(parsedData.bestCPS);
-    setClickMultiplier(parsedData.clickMultiplier);
-    setFlatClickBonus(parsedData.flatClickBonus);
-    setPercentageClickBonus(parsedData.percentageClickBonus);
-    setFlatAutoClicker(parsedData.flatAutoClicker);
-    setPercentAutoClicker(parsedData.percentAutoClicker);
+    setDrawingUnlocked(parsedData.drawingUnlocked || false);
+    setBestCPS(parsedData.bestCPS || 0);
+    setClickMultiplier(parsedData.clickMultiplier || 1);
+    setFlatClickBonus(parsedData.flatClickBonus || 0);
+    setPercentageClickBonus(parsedData.percentageClickBonus || 1);
+    setFlatAutoClicker(parsedData.flatAutoClicker || 0);
+    setPercentAutoClicker(parsedData.percentAutoClicker || 0);
+    setGamblingUnlocked(parsedData.gamblingUnlocked || false);
+    setChatUnlocked(parsedData.chatUnlocked || false);
+    setCursorImage(parsedData.cursorImage || null);
+    setUnlockedCursors(parsedData.unlockedCursors || []);
+    setEquippedCursor(parsedData.equippedCursor || null);
+    setUsername(parsedData.username || '');
+    setOnlineUsers(parsedData.onlineUsers || []);
+    setTeam(parsedData.team || null);
+    setTeamInvites(parsedData.teamInvites || []);
   }
   setIsLoaded(true);
 }, []);
@@ -280,7 +305,6 @@ return (
         flatClickBonus={flatClickBonus}
         percentageClickBonus={percentageClickBonus}
         bestCPS={bestCPS}
-        cursorImage={cursorImage}
       />
       {unlocked ? (
         <UnlockedContent

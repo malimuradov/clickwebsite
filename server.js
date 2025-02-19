@@ -4,16 +4,16 @@ const express = require('express');
 const socketIo = require('socket.io');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-
-// DEVELOPMENT MODE
-const isDevelopment = process.env.NODE_ENV === 'development';
-// Only require db if not in development mode
-const db = isDevelopment ? null : require('./db');
-
 const fs = require('fs');
 const path = require('path');
 
+// Configuration
+const isDevelopment = process.env.NODE_ENV === 'development';
+const db = isDevelopment ? null : require('./db');
+const PORT = process.env.PORT || 4000;
+const MAX_RECENT_MESSAGES = 50;
 
+// Server setup
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -23,17 +23,17 @@ const io = socketIo(server, {
   }
 });
 
-const MAX_RECENT_MESSAGES = 50;
+// Global variables
 let clickCount = 0;
 let clicks = [];
 let uniqueUsers = new Set();
-// let lastPingTimes = new Map();
 let onlineUsers = new Map();
 let teams = new Map();
-let userClicks = new Map(); // Store user clicks in memory
+let userClicks = new Map();
 let recentMessages = [];
 let cursors = {};
 
+// Helper functions
 function updateGlobalCPS() {
     const now = Date.now();
     clicks = clicks.filter(click => now - click < 1010);
@@ -41,29 +41,20 @@ function updateGlobalCPS() {
     io.emit('updateGlobalCPS', globalCPS);
 }
 
-setInterval(updateGlobalCPS, 100);
-
-// Function to update all users with online count and recent messages
 function updateAllUsers() {
   io.emit('updateOnlineUsers', uniqueUsers.size);
   io.emit('updateRecentMessages', recentMessages);
-  // io.emit('updateCursors', cursors);
-  // Remove old messages older than 1 minute
-  const oneMinuteAgo = Date.now() - 60000; // 1 minute ago
+  const oneMinuteAgo = Date.now() - 60000;
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
 }
-// Set interval to update all users every 5 seconds
-setInterval(updateAllUsers, 5000);
 
 function addRecentMessage(message) {
   recentMessages.push(message);
   if (recentMessages.length > MAX_RECENT_MESSAGES) {
-    recentMessages.shift(); // Remove the oldest message if we exceed the limit
+    recentMessages.shift();
   }
 }
 
-
-// Function to sync total clicks with the database
 async function syncTotalClicksWithDB() {
   if (isDevelopment) {
     console.log('Development mode: Skipping database sync');
@@ -79,7 +70,6 @@ async function syncTotalClicksWithDB() {
   }
 }
 
-// Function to sync user clicks with the database
 async function syncUserClicksWithDB() {
   if (isDevelopment) {
     console.log('Development mode: Skipping user clicks sync');
@@ -89,7 +79,7 @@ async function syncUserClicksWithDB() {
     if (clicks > 0) {
       try {
         await db.query('UPDATE progress SET total_clicks = total_clicks + $1 WHERE user_id = $2', [clicks, userId]);
-        userClicks.set(userId, 0); // Reset clicks after syncing
+        userClicks.set(userId, 0);
       } catch (error) {
         console.error(`Error syncing clicks for user ${userId}:`, error);
       }
@@ -97,12 +87,7 @@ async function syncUserClicksWithDB() {
   }
 }
 
-// Sync total clicks with DB every 30 seconds
-setInterval(syncTotalClicksWithDB, 30000);
-
-// Sync user clicks with DB every 10 seconds
-setInterval(syncUserClicksWithDB, 10000);
-
+// Socket.io event handlers
 io.on('connection', (socket) => {
   console.log('New client connected');
 
@@ -134,7 +119,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  
   socket.emit('updateRecentMessages', recentMessages);
 
   socket.on('chat message', (data) => {
@@ -171,10 +155,9 @@ io.on('connection', (socket) => {
     clicks.push(Date.now());
     uniqueUsers.add(socket.id);
 
-    // Share clicks with team members
     for (let [teamId, team] of teams) {
       if (team.members.includes(socket.id)) {
-        const sharedClickValue = clickValue * 0.1; // 10% of clicks shared with each team member
+        const sharedClickValue = clickValue * 0.1;
         team.members.forEach(memberId => {
           if (memberId !== socket.id) {
             io.to(memberId).emit('teamClickBonus', sharedClickValue);
@@ -196,7 +179,6 @@ io.on('connection', (socket) => {
     io.emit('updateCursors', cursors);
     io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
 
-    // Handle team disconnection
     for (let [teamId, team] of teams) {
       const index = team.members.indexOf(socket.id);
       if (index !== -1) {
@@ -215,32 +197,7 @@ io.on('connection', (socket) => {
   });
 });
 
-
-
-// function checkDisconnectedUsers() {
-//   const now = Date.now();
-//   for (const [socketId, lastPingTime] of lastPingTimes.entries()) {
-//     console.log(`Checking if user ${socketId} is still connected...`);
-//     console.log(`Difference: ${now - lastPingTime} ms`);
-//     if (now - lastPingTime > 19000) { // 19 seconds timeout
-//       const socket = io.sockets.sockets.get(socketId);
-//       if (socket) {
-//         console.log(`Disconnecting inactive user: ${socketId}`);
-//         socket.disconnect(true);
-//       }
-//       lastPingTimes.delete(socketId);
-//       uniqueUsers.delete(socketId);
-//       delete cursors[socketId];
-//     }
-//   }
-//   io.emit('updateOnlineUsers', uniqueUsers.size);
-//   io.emit('updateCursors', cursors);
-// }
-
-// // Run the check every 5 seconds
-// setInterval(checkDisconnectedUsers, 5000);
-
-// Function to save server data
+// Data persistence functions
 function saveServerData() {
   const data = {
     clickCount: clickCount,
@@ -257,7 +214,7 @@ function saveServerData() {
     }
   });
 }
-// Function to load server data
+
 function loadServerData() {
   const filePath = path.join(__dirname, 'serverData.json');
 
@@ -280,14 +237,13 @@ function loadServerData() {
   });
 }
 
-// Load saved data when the server starts
+// Initialization and intervals
 loadServerData();
+setInterval(updateGlobalCPS, 100);
+setInterval(updateAllUsers, 5000);
+setInterval(syncTotalClicksWithDB, 30000);
+setInterval(syncUserClicksWithDB, 10000);
+setInterval(saveServerData, 60 * 60 * 1000);
 
-// Set up hourly save
-setInterval(saveServerData, 60 * 60 * 1000); // 60 minutes * 60 seconds * 1000 milliseconds
-
-
-
-
-const PORT = process.env.PORT || 4000;
+// Start the server
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

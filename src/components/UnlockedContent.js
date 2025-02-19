@@ -32,7 +32,8 @@ function UnlockedContent({
   onCursorUpgrade,
   unlockedCursors,
   equippedCursor,
-  cursorImage
+  cursorImage,
+  onUsernameChange
 }) {
 
   return (
@@ -79,6 +80,7 @@ function UnlockedContent({
 
       {chatUnlocked && (
         <GlobalChat
+          onUsernameChange={onUsernameChange}
           totalClicks={totalClicks}
           onSendMessage={onSendMessage}
           username={username}
