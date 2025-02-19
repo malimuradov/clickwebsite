@@ -6,6 +6,9 @@ import Settings from './components/Settings';
 import io from 'socket.io-client';
 import CursorOverlay from './components/CursorOverlay';
 import './App.css';
+import OnlineUsers from './components/OnlineUsers';
+import TeamInfo from './components/TeamInfo';
+import TeamInvites from './components/TeamInvites';
 
 function App() {
 const [unlocked, setUnlocked] = useState(false);
@@ -26,6 +29,9 @@ const [equippedCursor, setEquippedCursor] = useState('default');
 const [socket, setSocket] = useState(null);
 const [cursors, setCursors] = useState({});
 const [username, setUsername] = useState(`User${Math.floor(Math.random() * 10000)}`);
+const [onlineUsers, setOnlineUsers] = useState([]);
+const [team, setTeam] = useState(null);
+const [teamInvites, setTeamInvites] = useState([]);
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
@@ -43,14 +49,77 @@ useEffect(() => {
     setCursors(updatedCursors);
   });
 
+  // // Implement ping-pong
+  // const pingInterval = setInterval(() => {
+  //   console.log('Pinging server...');
+  //   newSocket.emit('ping');
+  // }, 5000); // Send a ping every 5 seconds
+
+  // newSocket.on('pong', () => {
+  //   console.log('Pong received');
+  // });
+
+  return () => {
+    // clearInterval(pingInterval);
+    newSocket.close();
+  };
+}, []);
+
+useEffect(() => {
+  if (socket) {
+    socket.on('updateOnlineUsers', (users) => {
+      // Ensure users is always an array
+      setOnlineUsers(Array.isArray(users) ? users : []);
+    });
+
+    socket.on('teamInvite', (inviterId) => {
+      setTeamInvites(prev => [...prev, inviterId]);
+    });
+
+    socket.on('teamUpdate', (newTeam) => {
+      setTeam(newTeam);
+    });
+
+    // Emit the username when connecting
+    socket.emit('setUsername', username);
+  }
+}, [socket, username]);
+
+const handleInviteToTeam = (inviteeId) => {
+  if (socket) {
+    socket.emit('inviteToTeam', inviteeId);
+  }
+};
+
+const handleAcceptInvite = (inviterId) => {
+  if (socket) {
+    socket.emit('acceptTeamInvite', inviterId);
+    setTeamInvites(prev => prev.filter(id => id !== inviterId));
+  }
+};
+
+const handleLeaveTeam = () => {
+  if (socket) {
+    socket.emit('leaveTeam');
+    setTeam(null);
+  }
+};
+useEffect(() => {
+  const newSocket = io(socketUrl);
+  setSocket(newSocket);
+
+  newSocket.on('updateCursors', (updatedCursors) => {
+    setCursors(updatedCursors);
+  });
+
   return () => newSocket.close();
 }, []);
 
 const handleMouseMove = useCallback((event) => {
   if (socket) {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top + window.scrollY;
+    const x = event.clientX / rect.width * 100;
+    const y = event.clientY + window.scrollY;
     socket.emit('cursorMove', { x, y, username });
   }
 }, [socket, username]);
@@ -219,6 +288,14 @@ return (
         bestCPS={bestCPS}
         cursorImage={cursorImage}
       />
+      <OnlineUsers 
+        users={onlineUsers} 
+        onInvite={handleInviteToTeam} 
+        currentUser={username}
+        team={team}
+      />
+      <TeamInvites invites={teamInvites} onAccept={handleAcceptInvite} />
+      {team && <TeamInfo team={team} onLeave={handleLeaveTeam} />}
       {unlocked ? (
         <UnlockedContent
           totalClicks={totalClicks} 
@@ -241,10 +318,10 @@ return (
           username={username}
           onUsernameChange={handleUsernameChange}
         />
-          ) : null}
-        </div>
-      </div>
-    );
+      ) : null}
+    </div>
+  </div>
+);
 }
 
 export default App;

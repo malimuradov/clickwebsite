@@ -26,6 +26,9 @@ const io = socketIo(server, {
 let clickCount = 0;
 let clicks = [];
 let uniqueUsers = new Set();
+// let lastPingTimes = new Map();
+let onlineUsers = new Map();
+let teams = new Map();
 let userClicks = new Map(); // Store user clicks in memory
 let recentMessages = [];
 let cursors = {};
@@ -43,7 +46,7 @@ setInterval(updateGlobalCPS, 100);
 function updateAllUsers() {
   io.emit('updateOnlineUsers', uniqueUsers.size);
   io.emit('updateRecentMessages', recentMessages);
-  //io.emit('updateCursors', cursors);
+  // io.emit('updateCursors', cursors);
   // Remove old messages older than 1 minute
   const oneMinuteAgo = Date.now() - 60000; // 1 minute ago
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
@@ -94,68 +97,126 @@ setInterval(syncUserClicksWithDB, 10000);
 
 io.on('connection', (socket) => {
   console.log('New client connected');
-  uniqueUsers.add(socket.id);
-  console.log('Unique users online:', uniqueUsers.size);
 
-  // Send current count to newly connected client
-  socket.emit('updateCount', clickCount);
-  socket.emit('updateCursors', cursors);
+  socket.on('setUsername', (username) => {
+    onlineUsers.set(socket.id, { id: socket.id, username });
+    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+  });
 
   socket.on('cursorMove', ({ x, y, username }) => {
     cursors[socket.id] = { x, y, username };
-    socket.broadcast.emit('updateCursors', cursors);
+    io.emit('updateCursors', cursors);
   });
-  
-  socket.on('usernameChange', (newUsername) => {
-    if (cursors[socket.id]) {
-      cursors[socket.id].username = newUsername;
-      io.emit('updateCursors', cursors);
+
+  socket.on('inviteToTeam', (inviteeId) => {
+    io.to(inviteeId).emit('teamInvite', socket.id);
+  });
+
+  socket.on('acceptTeamInvite', (inviterId) => {
+    let team;
+    if (teams.has(inviterId)) {
+      team = teams.get(inviterId);
+      team.members.push(socket.id);
+    } else {
+      team = { members: [inviterId, socket.id] };
+      teams.set(inviterId, team);
+    }
+    team.members.forEach(memberId => {
+      io.to(memberId).emit('teamUpdate', team);
+    });
+  });
+
+  socket.on('leaveTeam', () => {
+    for (let [teamId, team] of teams) {
+      const index = team.members.indexOf(socket.id);
+      if (index !== -1) {
+        team.members.splice(index, 1);
+        if (team.members.length === 1) {
+          teams.delete(teamId);
+          io.to(team.members[0]).emit('teamUpdate', null);
+        } else {
+          team.members.forEach(memberId => {
+            io.to(memberId).emit('teamUpdate', team);
+          });
+        }
+        break;
+      }
     }
   });
 
-  // Emit the current number of online users to all clients
-  io.emit('updateOnlineUsers', uniqueUsers.size);
-  socket.emit('updateRecentMessages', recentMessages);
-
-  socket.on('incrementCount', (userId) => {
-    clickCount++;
+  socket.on('incrementCount', (clickValue) => {
+    clickCount += clickValue;
     clicks.push(Date.now());
+    uniqueUsers.add(socket.id);
 
-    // Update user clicks in memory
-    if (userId) {
-      const userClickCount = (userClicks.get(userId) || 0) + 1;
-      userClicks.set(userId, userClickCount);
+    // Share clicks with team members
+    for (let [teamId, team] of teams) {
+      if (team.members.includes(socket.id)) {
+        const sharedClickValue = clickValue * 0.1; // 10% of clicks shared with each team member
+        team.members.forEach(memberId => {
+          if (memberId !== socket.id) {
+            io.to(memberId).emit('teamClickBonus', sharedClickValue);
+          }
+        });
+        break;
+      }
     }
+
     io.emit('updateCount', clickCount);
+    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   });
 
-  // Chat functionality
-  socket.on('chat message', (msg) => {
-    const messageWithTimestamp = {
-      ...msg,
-      timestamp: Date.now()
-    };
-    recentMessages.push(messageWithTimestamp);
-    io.emit('chat message', messageWithTimestamp);
-  });
-
-  socket.on('syncUserClicks', (userId) => {
-    if (userId) {
-      const userClickCount = userClicks.get(userId) || 0;
-      socket.emit('updateUserClicks', userClickCount);
-    }
-  });
   socket.on('disconnect', () => {
     console.log('Client disconnected');
+    delete cursors[socket.id];
+    onlineUsers.delete(socket.id);
     uniqueUsers.delete(socket.id);
-    console.log('Unique users online:', uniqueUsers.size);
-    // Emit the updated number of online users to all clients
     io.emit('updateCursors', cursors);
-    io.emit('updateOnlineUsers', uniqueUsers.size);
+    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+
+    // Handle team disconnection
+    for (let [teamId, team] of teams) {
+      const index = team.members.indexOf(socket.id);
+      if (index !== -1) {
+        team.members.splice(index, 1);
+        if (team.members.length === 1) {
+          teams.delete(teamId);
+          io.to(team.members[0]).emit('teamUpdate', null);
+        } else if (team.members.length > 1) {
+          team.members.forEach(memberId => {
+            io.to(memberId).emit('teamUpdate', team);
+          });
+        }
+        break;
+      }
+    }
   });
 });
 
 
+
+// function checkDisconnectedUsers() {
+//   const now = Date.now();
+//   for (const [socketId, lastPingTime] of lastPingTimes.entries()) {
+//     console.log(`Checking if user ${socketId} is still connected...`);
+//     console.log(`Difference: ${now - lastPingTime} ms`);
+//     if (now - lastPingTime > 19000) { // 19 seconds timeout
+//       const socket = io.sockets.sockets.get(socketId);
+//       if (socket) {
+//         console.log(`Disconnecting inactive user: ${socketId}`);
+//         socket.disconnect(true);
+//       }
+//       lastPingTimes.delete(socketId);
+//       uniqueUsers.delete(socketId);
+//       delete cursors[socketId];
+//     }
+//   }
+//   io.emit('updateOnlineUsers', uniqueUsers.size);
+//   io.emit('updateCursors', cursors);
+// }
+
+// // Run the check every 5 seconds
+// setInterval(checkDisconnectedUsers, 5000);
 
 // Function to save server data
 function saveServerData() {
