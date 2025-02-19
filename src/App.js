@@ -25,15 +25,18 @@ const [unlockedCursors, setUnlockedCursors] = useState(['default']);
 const [equippedCursor, setEquippedCursor] = useState('default');
 const [socket, setSocket] = useState(null);
 const [cursors, setCursors] = useState({});
-
 const [username, setUsername] = useState(`User${Math.floor(Math.random() * 10000)}`);
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
+
 
 const handleUsernameChange = (newUsername) => {
   setUsername(newUsername);
 };
 
 useEffect(() => {
-  const newSocket = io('http://localhost:4000');
+  const newSocket = io(socketUrl);
   setSocket(newSocket);
 
   newSocket.on('updateCursors', (updatedCursors) => {
