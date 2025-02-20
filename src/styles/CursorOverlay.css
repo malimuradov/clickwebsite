@@ -13,12 +13,10 @@
   transform: translate(-50%, -50%);
 }
 
-.cursor {
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-bottom: 20px solid rgba(255, 0, 0, 0.7);
+.cursor-image {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .cursor-username {
@@ -33,3 +31,6 @@
   border-radius: 3px;
 }
 
+.local-cursor .cursor-username {
+  color: red;
+}

@@ -7,7 +7,7 @@ function CursorUpgradePopup({ onClose, onUpgrade, totalClicks, unlockedCursors, 
   const cursorUpgrades = {
     common: [
       { id: 'default', name: 'Default Cursor', cost: 0, effect: 'Standard click power', icon: '🖱️', cursorImage: null },
-      { id: 'wood', name: 'Wooden Cursor', cost: 50, effect: '+1 click power', icon: '🖱️🌳', cursorImage: '/images/cursorupgraded.png' },
+      { id: 'wood', name: 'Wooden Cursor', cost: 50, effect: '+1 click power', icon: '🖱️🌳', cursorImage: '/cursor-images/default.png' },
       { id: 'stone', name: 'Stone Cursor', cost: 100, effect: '+2 click power', icon: '🖱️🪨', cursorImage: 'stone-cursor.png' },
     ],
     rare: [

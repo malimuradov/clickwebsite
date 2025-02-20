@@ -163,7 +163,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('incrementCount', (clickValue) => {
-    clickCount += clickValue;
+    clickCount += 1;
     clicks.push(Date.now());
 
     for (let [teamId, team] of teams) {

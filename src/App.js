@@ -5,6 +5,9 @@ import Clicker from './components/Clicker';
 import UnlockedContent from './components/UnlockedContent';
 import './App.css';
 
+
+import Navbar from './components/Navbar';
+
 import { OnlineUsersProvider } from './contexts/OnlineUsersContext';
 
 function App() {
@@ -32,6 +35,9 @@ function App() {
   const [equippedCursor, setEquippedCursor] = useState(null);
 
   // Multiplayer
+  const [teamBonus, setTeamBonus] = useState(0);
+  const [globalClicks, setGlobalClicks] = useState(0);
+  const [globalCPS, setGlobalCPS] = useState(0);
   const [socket, setSocket] = useState(null);
   const [cursors, setCursors] = useState({});
   const [username, setUsername] = useState('');
@@ -57,6 +63,18 @@ function App() {
   // Socket event listeners
   useEffect(() => {
     if (socket) {
+      socket.on('updateCount', (newCount) => {
+        setGlobalClicks(newCount);
+      });
+  
+      socket.on('updateGlobalCPS', (newCPS) => {
+        setGlobalCPS(newCPS);
+      });
+
+      socket.on('teamClickBonus', (bonus) => {
+        setTeamBonus(prevBonus => prevBonus + bonus);
+      });
+
       socket.on('updateOnlineUsers', (users) => {
         setOnlineUsers(Array.isArray(users) ? users : []);
       });
@@ -74,9 +92,12 @@ function App() {
       }
 
       return () => {
+        socket.off('updateCount');
+        socket.off('updateGlobalCPS');
         socket.off('updateOnlineUsers');
         socket.off('teamInvite');
         socket.off('teamUpdate');
+        socket.off('teamClickBonus');
       };
     }
   }, [socket, username]);
@@ -146,7 +167,6 @@ function App() {
       setTeamInvites(parsedData.teamInvites || []);
       // Check if username exists, if not generate a new one
       const storedUsername = parsedData.username;
-      console.log(`Stored username: ${storedUsername}`);
       if (storedUsername) {
         setUsername(storedUsername);
       } else {
@@ -157,10 +177,8 @@ function App() {
       // If no stored data, generate a new username
       const newUsername = generateRandomUsername();
       setUsername(newUsername);
-      console.log(`Generated new username: ${newUsername}`);
     }
     setIsLoaded(true);
-    console.log('Game state loaded successfully');
   }, []);
 
   useEffect(() => {
@@ -212,6 +230,11 @@ function App() {
       setCursorImage(newCursorImage);
     }
   }, [totalClicks]);
+
+  const collectTeamBonus = useCallback(() => {
+    setTotalClicks(prevClicks => prevClicks + teamBonus);
+    setTeamBonus(0);
+  }, [teamBonus]);
 
   // Auto clicker effect
   useEffect(() => {
@@ -313,16 +336,18 @@ function App() {
   return (
     <div className="App" onMouseMove={handleMouseMove}>
       <div className="content">
-        <Settings onReset={resetGame} />
-        <OnlineUsersProvider>
+      <OnlineUsersProvider>
+        <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} />
+        <main style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Clicker
-            onUnlock={handleUnlock} 
-            totalClicks={totalClicks} 
-            flatClickBonus={flatClickBonus}
-            percentageClickBonus={percentageClickBonus}
-            bestCPS={bestCPS}
-            onlineUsers={onlineUsers}
-          />
+              onUnlock={handleUnlock} 
+              totalClicks={totalClicks} 
+              flatClickBonus={flatClickBonus}
+              percentageClickBonus={percentageClickBonus}
+              bestCPS={bestCPS}
+              onlineUsers={onlineUsers}
+            />
+        </main>
         {unlocked ? (
           <UnlockedContent
             totalClicks={totalClicks} 
@@ -351,6 +376,8 @@ function App() {
             teamInvites={teamInvites}
             onAcceptInvite={handleAcceptInvite}
             onLeaveTeam={handleLeaveTeam}
+            teamBonus={teamBonus}
+            onCollectTeamBonus={collectTeamBonus}
           />
         ) : null}
       </OnlineUsersProvider>

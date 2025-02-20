@@ -33,12 +33,19 @@ function UnlockedContent({
   unlockedCursors,
   equippedCursor,
   cursorImage,
-  onUsernameChange
+  onUsernameChange,
+  teamBonus,
+  onCollectTeamBonus
 }) {
 
   return (
     <div>
-      <CursorOverlay cursors={cursors} username={username}/>
+      {/* <CursorOverlay cursors={cursors} username={username}/> */}
+      <CursorOverlay 
+        cursors={cursors} 
+        currentUserId={username} 
+        userSkin={cursorImage} 
+      />
 
       <OnlineUsers 
         users={onlineUsers} 
@@ -49,7 +56,7 @@ function UnlockedContent({
 
       <TeamInvites invites={teamInvites} onAccept={onAcceptInvite} />
 
-      {team && <TeamInfo team={team} onLeave={onLeaveTeam} />}
+      {team && <TeamInfo team={team} onLeave={onLeaveTeam} teamBonus={teamBonus} onCollectTeamBonus={onCollectTeamBonus} />}
       
       <Shop 
         totalClicks={totalClicks} 

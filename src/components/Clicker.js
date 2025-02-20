@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ClickButton from './ClickButton';
+import Stats from './Stats';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 
 function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, bestCPS: propBestCPS }) {
   const { onlineUsers, socket } = useOnlineUsers();
   const [count, setCount] = useState(0);
   const [clientCPS, setClientCPS] = useState(0);
-  const [globalCPS, setGlobalCPS] = useState(0);
   const clicksRef = useRef([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const cpsRef = useRef(0);
@@ -28,6 +28,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
     const newTotalClicks = totalClicks + clickValue;
     onUnlock(newTotalClicks, Math.max(clientCPS, propBestCPS));
   }, [totalClicks, onUnlock, clientCPS, propBestCPS]);
+  
   const handleClick = useCallback(() => {
     const clickValue = calculateClickValue();
     processClick(clickValue);
@@ -36,10 +37,6 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
   useEffect(() => {
     socket.on('updateCount', (newCount) => {
       setCount(newCount);
-    });
-
-    socket.on('updateGlobalCPS', (newCPS) => {
-      setGlobalCPS(newCPS);
     });
 
     let simulationInterval;
@@ -84,14 +81,8 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
 
   return (
     <div>
-      <h2>Globally Clicked: {count} times</h2>
-      <h3>Your CPS: {clientCPS}</h3>
-      <h3>Your Best CPS: {propBestCPS}</h3>
-      <h3>Global CPS: {globalCPS}</h3>
-      <h3>Online Users: {onlineUsers.length}</h3>
       <ClickButton onClick={handleClick} />
-
-      <h3>Your Total Clicks: {totalClicks}</h3>
+      <Stats cps={clientCPS} bestCps={propBestCPS} totalClicks={totalClicks} />
       <button onClick={toggleSimulation}>
         {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
       </button>

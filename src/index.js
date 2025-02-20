@@ -8,7 +8,11 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <App />
+    <footer>
+    <h3><a href="https://www.flaticon.com/free-icons/mouse-clicker" title="mouse clicker icons">Mouse clicker icons created by Andrean Prabowo - Flaticon</a></h3>
+    </footer>
   </React.StrictMode>
+  
 );
 
 // If you want to start measuring performance in your app, pass a function
