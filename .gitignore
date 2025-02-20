@@ -5,6 +5,8 @@
 /.pnp
 .pnp.js
 
+
+serverData.json
 # testing
 /coverage
 
@@ -23,4 +25,3 @@ yarn-debug.log*
 yarn-error.log*
 
 .env
-serverData.json
