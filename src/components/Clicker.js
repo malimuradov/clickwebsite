@@ -1,19 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ClickButton from './ClickButton';
-import io from 'socket.io-client';
-
-const isDevelopment = process.env.NODE_ENV === 'development';
-const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
-const socket = io(socketUrl);
+import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 
 function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, bestCPS: propBestCPS }) {
+  const { onlineUsers, socket } = useOnlineUsers();
   const [count, setCount] = useState(0);
   const [clientCPS, setClientCPS] = useState(0);
   const [globalCPS, setGlobalCPS] = useState(0);
   const clicksRef = useRef([]);
   const [isSimulating, setIsSimulating] = useState(false);
   const cpsRef = useRef(0);
-  const [onlineUsers, setOnlineUsers] = useState(0);
 
   const calculateClickValue = useCallback(() => {
     const baseClickValue = 1;
@@ -36,16 +32,6 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
     const clickValue = calculateClickValue();
     processClick(clickValue);
   }, [calculateClickValue, processClick]);
-
-  useEffect(() => {
-    socket.on('updateOnlineUsers', (numUsers) => {
-      setOnlineUsers(numUsers);
-    });
-
-    return () => {
-      socket.off('updateOnlineUsers');
-    };
-  }, []);
 
   useEffect(() => {
     socket.on('updateCount', (newCount) => {
@@ -82,11 +68,11 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
     return () => {
       socket.off('updateCount');
       socket.off('updateGlobalCPS');
-      socket.off('updateOnlineUsers');  // Don't forget to remove the listener
       clearInterval(intervalId);
       if (simulationInterval) clearInterval(simulationInterval);
     };
   }, [handleClick, isSimulating, onUnlock, propBestCPS, totalClicks]);
+
 
 
 
@@ -102,7 +88,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
       <h3>Your CPS: {clientCPS}</h3>
       <h3>Your Best CPS: {propBestCPS}</h3>
       <h3>Global CPS: {globalCPS}</h3>
-      <h3>Online Users: {onlineUsers}</h3> 
+      <h3>Online Users: {onlineUsers.length}</h3>
       <ClickButton onClick={handleClick} />
 
       <h3>Your Total Clicks: {totalClicks}</h3>

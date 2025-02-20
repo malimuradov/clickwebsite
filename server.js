@@ -26,7 +26,6 @@ const io = socketIo(server, {
 // Global variables
 let clickCount = 0;
 let clicks = [];
-let uniqueUsers = new Set();
 let onlineUsers = new Map();
 let teams = new Map();
 let userClicks = new Map();
@@ -42,10 +41,23 @@ function updateGlobalCPS() {
 }
 
 function updateAllUsers() {
-  io.emit('updateOnlineUsers', uniqueUsers.size);
+  io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   io.emit('updateRecentMessages', recentMessages);
+  io.emit('updateCursors', cursors);
   const oneMinuteAgo = Date.now() - 60000;
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
+}
+
+// clean up inactive users
+function cleanupInactiveUsers() {
+  const now = Date.now();
+  for (const [socketId, user] of onlineUsers.entries()) {
+    if (now - user.lastActivity > 30000) { // 10 seconds of inactivity
+      onlineUsers.delete(socketId);
+      delete cursors[socketId];
+    }
+  }
+  updateAllUsers();
 }
 
 function addRecentMessage(message) {
@@ -153,7 +165,6 @@ io.on('connection', (socket) => {
   socket.on('incrementCount', (clickValue) => {
     clickCount += clickValue;
     clicks.push(Date.now());
-    uniqueUsers.add(socket.id);
 
     for (let [teamId, team] of teams) {
       if (team.members.includes(socket.id)) {
@@ -173,11 +184,9 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    delete cursors[socket.id];
     onlineUsers.delete(socket.id);
-    uniqueUsers.delete(socket.id);
-    io.emit('updateCursors', cursors);
-    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+    delete cursors[socket.id];
+    updateAllUsers();
 
     for (let [teamId, team] of teams) {
       const index = team.members.indexOf(socket.id);
@@ -241,9 +250,11 @@ function loadServerData() {
 loadServerData();
 setInterval(updateGlobalCPS, 100);
 setInterval(updateAllUsers, 5000);
+setInterval(cleanupInactiveUsers, 5000);
 setInterval(syncTotalClicksWithDB, 30000);
 setInterval(syncUserClicksWithDB, 10000);
 setInterval(saveServerData, 60 * 60 * 1000);
+
 
 // Start the server
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

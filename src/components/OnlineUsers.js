@@ -1,18 +1,22 @@
 import React from 'react';
+import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 
-function OnlineUsers({ users, onInvite, currentUser, team }) {
-  // Check if users is an array and has items
-  const hasUsers = Array.isArray(users) && users.length > 0;
+function OnlineUsers({ currentUser, team }) {
+  const { onlineUsers, socket } = useOnlineUsers();
+
+  const handleInvite = (userId) => {
+    socket.emit('inviteToTeam', userId);
+  };
   return (
     <div className="online-users">
-      <h3>Online Users</h3>
-      {hasUsers ? (
+      <h3>Online Users ({onlineUsers.length})</h3>
+      {onlineUsers.length > 0 ? (
         <ul>
-          {users.map(user => (
+          {onlineUsers.map(user => (
             <li key={user.id}>
               {user.username}
               {user.username !== currentUser && !team && (
-                <button onClick={() => onInvite(user.id)}>Invite to Team</button>
+                <button onClick={() => handleInvite(user.id)}>Invite to Team</button>
               )}
             </li>
           ))}
@@ -25,3 +29,4 @@ function OnlineUsers({ users, onInvite, currentUser, team }) {
 }
 
 export default OnlineUsers;
+
