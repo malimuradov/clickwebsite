@@ -129,7 +129,6 @@ io.on('connection', (socket) => {
         const decoded = jwt.verify(clientToken, JWT_SECRET);
         userId = decoded.userId;
         username = decoded.username;
-        console.log(`Authenticated user ${username} with token ${clientToken}`);
       } catch (error) {
         console.error('Token verification failed:', error);
         // If token is invalid, we'll create a new one below

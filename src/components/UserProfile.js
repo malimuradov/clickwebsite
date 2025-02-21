@@ -31,28 +31,37 @@ function UserProfile({ onClose, onLogin }) {
           tempUserId: isRegistering ? tempUserId : undefined // Include tempUserId only for registration
         }),
       });
-      const data = await response.json();
-      if (response.ok) {
-        if (data.token) {
-          localStorage.setItem('userToken', data.token);
-          if (isRegistering) {
-            // Remove the temporary user ID from localStorage after successful registration
-            localStorage.removeItem('tempUserId');
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const data = await response.json();
+        if (response.ok) {
+          if (data.token) {
+            localStorage.setItem('userToken', data.token);
+            if (isRegistering) {
+              localStorage.removeItem('tempUserId');
+            }
+            onLogin(data.token);
+            console.log(isRegistering ? 'Registration successful' : 'Login successful');
+            onClose();
+          } else {
+            setError('No token received from server');
           }
-          onLogin(data.token);
-          console.log(isRegistering ? 'Registration successful' : 'Login successful');
-          onClose();
         } else {
-          setError('No token received from server');
+          setError(data.message || 'An error occurred');
         }
       } else {
-        setError(data.message || 'An error occurred');
+        // If the response is not JSON, log it and set a generic error
+        const text = await response.text();
+        console.error('Unexpected response:', text);
+        setError('Unexpected response from server. Please try again later.');
       }
     } catch (error) {
       console.error('Error:', error);
       setError('Network error. Please try again.');
     }
   };
+
 
   return (
     <div className="user-profile-overlay">
