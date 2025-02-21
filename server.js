@@ -361,37 +361,47 @@ app.post('/api/register', async (req, res) => {
 
 
 
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/register', async (req, res) => {
+  const { tempUserId, username, password, email } = req.body;
 
-  if (isDevelopment) {
-    console.log('Development mode: Skipping login');
-    return res.status(200).json({ token: 'dev_token', userId: 'dev_user_id' });
+  // Check if username is provided and not empty
+  if (!username || username.trim() === '') {
+    return res.status(400).json({ error: 'Username is required' });
   }
 
   try {
-    // Check if user exists
-    const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    // Check if username or email already exists
+    const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Username or email already exists' });
     }
 
-    const user = result.rows[0];
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    // Insert the new user into the database
+    const result = await db.query(
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
+      [username, email, hashedPassword]
+    );
+
+    const newUserId = result.rows[0].id;
+
+    // Transfer progress from temp user to new user
+    if (tempUserId) {
+      await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
     }
 
-    // Create and assign token
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, userId: user.id });
+    // Create a new token for the registered user
+    const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
+
+    res.json({ token, userId: newUserId, username });
   } catch (error) {
-    console.error('Error in login:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'An error occurred during registration' });
   }
 });
+
 
 
 
