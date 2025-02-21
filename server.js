@@ -362,9 +362,10 @@ app.post('/api/register', async (req, res) => {
 
 
 app.post('/api/register', async (req, res) => {
+  console.log('Received registration request:', req.body);
   const { tempUserId, username, password, email } = req.body;
 
-  console.log('Registration attempt:', { tempUserId, username, email }); // Log registration attempt
+  console.log('Extracted data:', { tempUserId, username, password: password ? '[REDACTED]' : undefined, email });
 
   // Check if all required fields are provided
   if (!username || !password || !email) {
@@ -377,6 +378,7 @@ app.post('/api/register', async (req, res) => {
     console.log('Empty username provided');
     return res.status(400).json({ error: 'Username cannot be empty' });
   }
+
   try {
     // Check if username or email already exists
     const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
@@ -405,7 +407,7 @@ app.post('/api/register', async (req, res) => {
     }
 
     // Create a new token for the registered user
-    const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ id: newUserId, username }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
     console.log('Registration successful');
     res.json({ token, userId: newUserId, username });
@@ -414,6 +416,7 @@ app.post('/api/register', async (req, res) => {
     res.status(500).json({ error: 'An error occurred during registration', details: error.message });
   }
 });
+
 
 
 
