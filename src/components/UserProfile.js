@@ -18,7 +18,7 @@ function UserProfile({ onClose, onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    const endpoint = isRegistering ? '/register' : '/login';
+    const endpoint = isRegistering ? '/api/register' : '/api/login';
     try {
       const response = await fetch(endpoint, {
         method: 'POST',

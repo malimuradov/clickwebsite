@@ -325,7 +325,7 @@ setInterval(saveServerData, 60 * 60 * 1000);
 
 
 // Authentication routes
-app.post('/register', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { tempUserId, username, password, email } = req.body;
 
   try {
@@ -360,7 +360,7 @@ app.post('/register', async (req, res) => {
 });
 
 
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
   if (isDevelopment) {
