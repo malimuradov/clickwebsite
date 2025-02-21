@@ -4,6 +4,7 @@ import '../styles/UserProfile.css';
 function UserProfile({ onClose, onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [isRegistering, setIsRegistering] = useState(true);
   const [error, setError] = useState('');
   const [tempUserId, setTempUserId] = useState(null);
@@ -15,6 +16,7 @@ function UserProfile({ onClose, onLogin }) {
       setTempUserId(storedTempUserId);
     }
   }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -28,6 +30,7 @@ function UserProfile({ onClose, onLogin }) {
         body: JSON.stringify({ 
           email, 
           password,
+          username: isRegistering ? username : undefined, // Include username only for registration
           tempUserId: isRegistering ? tempUserId : undefined // Include tempUserId only for registration
         }),
       });
@@ -62,13 +65,21 @@ function UserProfile({ onClose, onLogin }) {
     }
   };
 
-
   return (
     <div className="user-profile-overlay">
       <div className="user-profile-popup">
         <h2>{isRegistering ? 'Register' : 'Login'}</h2>
         {error && <p className="error-message">{error}</p>}
         <form onSubmit={handleSubmit}>
+          {isRegistering && (
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          )}
           <input
             type="email"
             placeholder="Email"
@@ -100,3 +111,4 @@ function UserProfile({ onClose, onLogin }) {
 }
 
 export default UserProfile;
+
