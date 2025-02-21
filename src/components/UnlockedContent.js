@@ -35,7 +35,11 @@ function UnlockedContent({
   cursorImage,
   onUsernameChange,
   teamBonus,
-  onCollectTeamBonus
+  onCollectTeamBonus,
+  currentUserId,
+  userSkin,
+  userEffect,
+  userAbility
 }) {
 
   return (
@@ -43,8 +47,10 @@ function UnlockedContent({
       {/* <CursorOverlay cursors={cursors} username={username}/> */}
       <CursorOverlay 
         cursors={cursors} 
-        currentUserId={username} 
-        userSkin={cursorImage} 
+        currentUserId={currentUserId} 
+        userSkin={userSkin}
+        userEffect={userEffect}
+        userAbility={userAbility}
       />
 
       <OnlineUsers 
@@ -72,7 +78,7 @@ function UnlockedContent({
         onCursorUpgrade={onCursorUpgrade}
         unlockedCursors={unlockedCursors}
         equippedCursor={equippedCursor}
-        cursorImage={cursorImage}
+        userSkin={userSkin}
       />
 
       {gamblingUnlocked && (

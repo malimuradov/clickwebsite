@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import io from 'socket.io-client';
-import Settings from './components/Settings';
 import Clicker from './components/Clicker';
 import UnlockedContent from './components/UnlockedContent';
 import './App.css';
-
 
 import Navbar from './components/Navbar';
 
 import { OnlineUsersProvider } from './contexts/OnlineUsersContext';
 
 function App() {
+  // Auth
+  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
   // Game state
   const [unlocked, setUnlocked] = useState(false);
   const [totalClicks, setTotalClicks] = useState(0);
@@ -33,6 +35,8 @@ function App() {
   const [cursorImage, setCursorImage] = useState(null);
   const [unlockedCursors, setUnlockedCursors] = useState([]);
   const [equippedCursor, setEquippedCursor] = useState(null);
+  const [cursorEffect, setCursorEffect] = useState(null);
+  const [cursorAbility, setCursorAbility] = useState(null)
 
   // Multiplayer
   const [teamBonus, setTeamBonus] = useState(0);
@@ -41,6 +45,7 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [cursors, setCursors] = useState({});
   const [username, setUsername] = useState('');
+  const [userId, setUserId] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [team, setTeam] = useState(null);
   const [teamInvites, setTeamInvites] = useState([]);
@@ -50,8 +55,37 @@ function App() {
 
   // Socket connection
   useEffect(() => {
+    const storedToken = localStorage.getItem('userToken');
     const newSocket = io(socketUrl);
-    setSocket(newSocket);
+
+    newSocket.on('authentication', ({ token, userId, username }) => {
+      localStorage.setItem('token', token);
+      setUserId(userId);
+      setUsername(username);
+    });
+
+    // Authenticate with the server
+    const token = localStorage.getItem('token');
+    if (token) {
+      newSocket.emit('authenticate', token);
+    } else {
+      newSocket.emit('authenticate', null);
+    }
+
+    newSocket.on('connect', () => {
+      console.log('Connected to the server');
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error('Failed to connect to the server:', err);
+    });
+
+    // newSocket.on('authentication', ({ token, userId, username }) => {
+    //   localStorage.setItem('userToken', token);
+    //   setUserId(userId);
+    //   setUsername(username);
+    // });
+    setSocket(newSocket)
 
     newSocket.on('updateCursors', (updatedCursors) => {
       setCursors(updatedCursors);
@@ -59,6 +93,12 @@ function App() {
 
     return () => newSocket.close();
   }, [socketUrl]);
+
+  // Auth handle
+  const handleLogin = (token) => {
+    setIsLoggedIn(true);
+    // Reconnect socket with new token or perform other necessary actions
+  };
 
   // Socket event listeners
   useEffect(() => {
@@ -72,7 +112,11 @@ function App() {
       });
 
       socket.on('teamClickBonus', (bonus) => {
-        setTeamBonus(prevBonus => prevBonus + bonus);
+        setTeamBonus(prevBonus => {
+          const numPrevBonus = Number(prevBonus) || 0;
+          const numBonus = Number(bonus) || 0;
+          return Number((numPrevBonus + numBonus).toFixed(2));
+        });
       });
 
       socket.on('updateOnlineUsers', (users) => {
@@ -109,16 +153,6 @@ function App() {
     }
   }, [socket, username]);
 
-  // Generate random username
-  const generateRandomUsername = () => {
-    const adjectives = ['Happy', 'Lucky', 'Sunny', 'Clever', 'Swift'];
-    const nouns = ['Clicker', 'Gamer', 'Player', 'Champion', 'Star'];
-    const randomNumber = Math.floor(Math.random() * 1000);
-    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-    return `${randomAdjective}${randomNoun}${randomNumber}`;
-  };
-
   // Game state management
   const saveGameState = useCallback(() => {
     if (isLoaded) {
@@ -138,7 +172,10 @@ function App() {
         equippedCursor,
         username,
         team,
-        teamInvites
+        teamInvites,
+        cursorEffect,
+        cursorAbility,
+        chatUnlocked
       };
       localStorage.setItem('gameState', JSON.stringify(gameState));
     }
@@ -165,18 +202,21 @@ function App() {
       setUsername(parsedData.username || '');
       setTeam(parsedData.team || null);
       setTeamInvites(parsedData.teamInvites || []);
+      setChatUnlocked(parsedData.chatUnlocked || false);
+      setCursorAbility(parsedData.cursorAbility || null);
+      setCursorEffect(parsedData.cursorEffect || null);
       // Check if username exists, if not generate a new one
       const storedUsername = parsedData.username;
       if (storedUsername) {
         setUsername(storedUsername);
       } else {
-        const newUsername = generateRandomUsername();
-        setUsername(newUsername);
+        // const newUsername = generateRandomUsername();
+        // setUsername(newUsername);
       }
     } else {
-      // If no stored data, generate a new username
-      const newUsername = generateRandomUsername();
-      setUsername(newUsername);
+      // // If no stored data, generate a new username
+      // const newUsername = generateRandomUsername();
+      // setUsername(newUsername);
     }
     setIsLoaded(true);
   }, []);
@@ -195,6 +235,15 @@ function App() {
     }
     setBestCPS(prevBestCPS => Math.max(prevBestCPS, newCPS));
   }, []);
+
+  const handleCursorUpgrade = useCallback((cursorId, cost, newCursorImage) => {
+    if (totalClicks >= cost) {
+      setTotalClicks(prevClicks => prevClicks - cost);
+      setUnlockedCursors(prev => [...prev, cursorId]);
+      setEquippedCursor(cursorId);
+      setCursorImage(newCursorImage);
+    }
+  }, [totalClicks]);
 
   const handlePurchase = useCallback((cost) => {
     if (totalClicks >= cost) {
@@ -219,17 +268,16 @@ function App() {
       case 'cursorUpgrade':
         handleCursorUpgrade(additionalData.id, additionalData.cost, additionalData.cursorImage);
         break;
+      case 'cursorEffect':
+        setCursorEffect(value);
+        break;
+      case 'cursorAbility':
+        setCursorAbility(value);
+        break;
     }
-  }, []);
+  }, [handleCursorUpgrade]);
 
-  const handleCursorUpgrade = useCallback((cursorId, cost, newCursorImage) => {
-    if (totalClicks >= cost) {
-      setTotalClicks(prevClicks => prevClicks - cost);
-      setUnlockedCursors(prev => [...prev, cursorId]);
-      setEquippedCursor(cursorId);
-      setCursorImage(newCursorImage);
-    }
-  }, [totalClicks]);
+  
 
   const collectTeamBonus = useCallback(() => {
     setTotalClicks(prevClicks => prevClicks + teamBonus);
@@ -337,7 +385,7 @@ function App() {
     <div className="App" onMouseMove={handleMouseMove}>
       <div className="content">
       <OnlineUsersProvider>
-        <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} />
+        <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} />
         <main style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Clicker
               onUnlock={handleUnlock} 
@@ -378,6 +426,10 @@ function App() {
             onLeaveTeam={handleLeaveTeam}
             teamBonus={teamBonus}
             onCollectTeamBonus={collectTeamBonus}
+            userSkin={cursorImage}
+            userEffect={cursorEffect}
+            userAbility={cursorAbility}
+            currentUserId={userId}
           />
         ) : null}
       </OnlineUsersProvider>

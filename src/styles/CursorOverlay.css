@@ -1,4 +1,4 @@
-.content .cursor-overlay {
+.cursor-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -21,16 +21,23 @@
 
 .cursor-username {
   position: absolute;
-  top: 20px;
-  left: 10px;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   white-space: nowrap;
   font-size: 12px;
-  color: #333;
-  background-color: rgba(255, 255, 255, 0.8);
+  color: #fff;
+  background-color: rgba(0, 0, 0, 0.5);
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-.local-cursor .cursor-username {
-  color: red;
+.click-animation {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
 }

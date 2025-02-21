@@ -1,77 +1,161 @@
-import React, { useState, useEffect } from 'react';
-import '../styles/CursorOverlay.css';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 
-function CursorOverlay({ cursors, currentUserId, userSkin }) {
+function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbility }) {
   const [localCursor, setLocalCursor] = useState({ x: 0, y: 0 });
   const { onlineUsers, socket } = useOnlineUsers();
+  const [isClicking, setIsClicking] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [showClickAnimation, setShowClickAnimation] = useState(false);
+  const clickTimeoutRef = useRef(null);
+  const trailRef = useRef([]);
 
   useEffect(() => {
     const handleMouseMove = (e) => {
-      setLocalCursor({
+      const newPosition = {
         x: (e.clientX / window.innerWidth) * 100,
         y: e.clientY
-      });
+      };
+      setLocalCursor(newPosition);
+
+      // Update trail for effect
+      if (userEffect === 'fire') {
+        trailRef.current.push(newPosition);
+        if (trailRef.current.length > 10) {
+          trailRef.current.shift();
+        }
+      }
+    };
+
+    const handleMouseDown = () => {
+      setIsClicking(true);
+      clickTimeoutRef.current = setTimeout(() => {
+        setShowClickAnimation(true);
+      }, 1000);
+    };
+
+    const handleMouseUp = () => {
+      setIsClicking(false);
+      setShowClickAnimation(false);
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [userEffect]);
 
-  useEffect(() => {
-    // Hide the real cursor
-    document.body.style.cursor = 'none';
-
-    return () => {
-      document.body.style.cursor = 'default';
-    };
-  }, []);
-
-  const getCursorImage = (skin) => {
-    // You can define more skins here
-    const skins = {
-      default: '/cursor-images/default.png',
-      gold: '/cursor-images/gold.png',
-      rainbow: '/cursor-images/rainbow.png',
-      // Add more skins as needed
-    };
-    return skins[skin] || skins.default;
+  const renderCursorEffect = () => {
+    switch (userEffect) {
+      case 'fire':
+        return trailRef.current.map((pos, index) => (
+          <div
+            key={index}
+            style={{
+              position: 'absolute',
+              left: `${pos.x}%`,
+              top: `${pos.y}px`,
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: 'orange',
+              opacity: (index + 1) / trailRef.current.length,
+            }}
+          />
+        ));
+      case 'glow':
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${localCursor.x}%`,
+              top: `${localCursor.y}px`,
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              filter: 'blur(5px)',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        );
+      default:
+        return null;
+    }
   };
-  return (
-    <div className="cursor-overlay">
-      {/* Render other users' cursors */}
-      {Object.entries(cursors).map(([id, { x, y, username, skin }]) => (
-        // console.log(id, socket.id),
-        id !== socket.id && (
-          <div key={id} className="cursor-container" style={{ left: `${x}%`, top: `${y}px` }}>
-            <img 
-              src={getCursorImage(skin)} 
-              alt="Cursor" 
-              className="cursor-image"
-            />
-            <div className="cursor-username">{username}</div>
-          </div>
-        )
-      ))}
 
-      {/* Render current user's cursor */}
-      {/* <div 
-        className="cursor-container local-cursor" 
-        style={{ left: `${localCursor.x}%`, top: `${localCursor.y}px` }}
-      >
-        <img 
-          src={getCursorImage(userSkin)} 
-          alt="Your Cursor" 
-          className="cursor-image"
+  const renderCursorAbility = () => {
+    if (!showClickAnimation) return null;
+
+    switch (userAbility) {
+      case 'fireBreath':
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${localCursor.x}%`,
+              top: `${localCursor.y}px`,
+              width: '100px',
+              height: '50px',
+              background: 'linear-gradient(90deg, red, orange, yellow)',
+              transform: 'translate(0, -50%)',
+              opacity: 0.7,
+              borderRadius: '0 25px 25px 0',
+            }}
+          />
+        );
+      case 'iceBlast':
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${localCursor.x}%`,
+              top: `${localCursor.y}px`,
+              width: '80px',
+              height: '80px',
+              background: 'radial-gradient(circle, white, lightblue, blue)',
+              borderRadius: '50%',
+              transform: 'translate(-50%, -50%)',
+              opacity: 0.7,
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      {renderCursorEffect()}
+      {renderCursorAbility()}
+      {Object.entries(cursors).map(([id, cursor]) => (
+        <div
+          key={id}
+          style={{
+            position: 'absolute',
+            left: `${cursor.x}%`,
+            top: `${cursor.y}px`,
+            width: '20px',
+            height: '20px',
+            backgroundImage: `url(${cursor.skin || userSkin})`,
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            transform: 'translate(-50%, -50%)',
+          }}
         />
-      </div> */}
+      ))}
     </div>
   );
 }
 
 export default CursorOverlay;
-
 

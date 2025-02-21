@@ -6,12 +6,14 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // Configuration
 const isDevelopment = process.env.NODE_ENV === 'development';
 const db = isDevelopment ? null : require('./db');
 const PORT = process.env.PORT || 4000;
 const MAX_RECENT_MESSAGES = 50;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Server setup
 const app = express();
@@ -32,6 +34,9 @@ let userClicks = new Map();
 let recentMessages = [];
 let cursors = {};
 
+// Middleware
+app.use(express.json());
+
 // Helper functions
 function updateGlobalCPS() {
     const now = Date.now();
@@ -46,6 +51,21 @@ function updateAllUsers() {
   io.emit('updateCursors', cursors);
   const oneMinuteAgo = Date.now() - 60000;
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
+}
+
+// Add this function to generate a unique username
+function generateUniqueUsername() {
+  let username;
+  do {
+    const randomString = crypto.randomBytes(4).toString('hex');
+    username = `User_${randomString}`;
+  } while (isUsernameTaken(username));
+  return username;
+}
+
+// Add this function to check if a username already exists
+function isUsernameTaken(username) {
+  return Array.from(onlineUsers.values()).some(user => user.username === username);
 }
 
 // clean up inactive users
@@ -82,19 +102,16 @@ async function syncTotalClicksWithDB() {
   }
 }
 
-async function syncUserClicksWithDB() {
+async function syncUserClicksWithDB(userId, clicks) {
   if (isDevelopment) {
     console.log('Development mode: Skipping user clicks sync');
     return;
   }
-  for (const [userId, clicks] of userClicks.entries()) {
-    if (clicks > 0) {
-      try {
-        await db.query('UPDATE progress SET total_clicks = total_clicks + $1 WHERE user_id = $2', [clicks, userId]);
-        userClicks.set(userId, 0);
-      } catch (error) {
-        console.error(`Error syncing clicks for user ${userId}:`, error);
-      }
+  if (clicks > 0) {
+    try {
+      await db.query('UPDATE progress SET total_clicks = total_clicks + $1 WHERE user_id = $2', [clicks, userId]);
+    } catch (error) {
+      console.error(`Error syncing clicks for user ${userId}:`, error);
     }
   }
 }
@@ -103,35 +120,86 @@ async function syncUserClicksWithDB() {
 io.on('connection', (socket) => {
   console.log('New client connected');
 
-  socket.on('setUsername', (username) => {
-    onlineUsers.set(socket.id, { id: socket.id, username });
+  socket.on('authenticate', (clientToken) => {
+    let userId, username;
+
+    if (clientToken) {
+      // Verify existing token
+      try {
+        const decoded = jwt.verify(clientToken, JWT_SECRET);
+        userId = decoded.userId;
+        username = decoded.username;
+        console.log(`Authenticated user ${username} with token ${clientToken}`);
+      } catch (error) {
+        console.error('Token verification failed:', error);
+        // If token is invalid, we'll create a new one below
+      }
+    }
+
+    if (!userId) {
+      // Generate new temporary user
+      userId = crypto.randomBytes(16).toString('hex');
+      username = generateUniqueUsername();
+
+      // Create a new token
+      clientToken = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+    }
+
+    // Store the userId in the socket object for future reference
+    socket.userId = userId;
+
+    // Update the onlineUsers map
+    onlineUsers.set(userId, { id: userId, username });
+    
+    // Send the token back to the client
+    socket.emit('authentication', { token: clientToken, userId, username });
+
+    // Emit initial data to the authenticated user
+    socket.emit('updateRecentMessages', recentMessages);
+    socket.emit('updateCount', clickCount);
     io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   });
 
+  socket.on('setUsername', (newUsername) => {
+    if (isUsernameTaken(newUsername)) {
+      socket.emit('usernameError', 'Username already taken');
+    } else {
+      const user = onlineUsers.get(socket.userId);
+      if (user) {
+        user.username = newUsername;
+        onlineUsers.set(socket.userId, user);
+        
+        // Update the token with the new username
+        const newToken = jwt.sign({ id: socket.userId, username: newUsername }, JWT_SECRET, { expiresIn: '30d' });
+        socket.emit('authentication', { token: newToken, userId: socket.userId, username: newUsername });
+        
+        io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+      }
+    }
+  });
+
   socket.on('cursorMove', ({ x, y, username }) => {
-    cursors[socket.id] = { x, y, username };
+    cursors[socket.userId] = { x, y, username };
     io.emit('updateCursors', cursors);
   });
 
   socket.on('inviteToTeam', (inviteeId) => {
-    io.to(inviteeId).emit('teamInvite', socket.id);
+    io.to(inviteeId).emit('teamInvite', socket.userId);
   });
 
   socket.on('acceptTeamInvite', (inviterId) => {
     let team;
     if (teams.has(inviterId)) {
       team = teams.get(inviterId);
-      team.members.push(socket.id);
+      team.members.push(socket.userId);
     } else {
-      team = { members: [inviterId, socket.id] };
+      team = { members: [inviterId, socket.userId] };
       teams.set(inviterId, team);
     }
     team.members.forEach(memberId => {
       io.to(memberId).emit('teamUpdate', team);
     });
   });
-
-  socket.emit('updateRecentMessages', recentMessages);
 
   socket.on('chat message', (data) => {
     console.log(`User ${data.username} sent a message: ${data.message}`);
@@ -146,7 +214,7 @@ io.on('connection', (socket) => {
 
   socket.on('leaveTeam', () => {
     for (let [teamId, team] of teams) {
-      const index = team.members.indexOf(socket.id);
+      const index = team.members.indexOf(socket.userId);
       if (index !== -1) {
         team.members.splice(index, 1);
         if (team.members.length === 1) {
@@ -167,10 +235,10 @@ io.on('connection', (socket) => {
     clicks.push(Date.now());
 
     for (let [teamId, team] of teams) {
-      if (team.members.includes(socket.id)) {
+      if (team.members.includes(socket.userId)) {
         const sharedClickValue = clickValue * 0.1;
         team.members.forEach(memberId => {
-          if (memberId !== socket.id) {
+          if (memberId !== socket.userId) {
             io.to(memberId).emit('teamClickBonus', sharedClickValue);
           }
         });
@@ -184,12 +252,12 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    onlineUsers.delete(socket.id);
-    delete cursors[socket.id];
+    onlineUsers.delete(socket.userId);
+    delete cursors[socket.userId];
     updateAllUsers();
 
     for (let [teamId, team] of teams) {
-      const index = team.members.indexOf(socket.id);
+      const index = team.members.indexOf(socket.userId);
       if (index !== -1) {
         team.members.splice(index, 1);
         if (team.members.length === 1) {
@@ -256,5 +324,78 @@ setInterval(syncUserClicksWithDB, 10000);
 setInterval(saveServerData, 60 * 60 * 1000);
 
 
+
+// Authentication routes
+app.post('/register', async (req, res) => {
+  const { tempUserId, username, password, email } = req.body;
+
+  try {
+    // Check if username or email already exists
+    const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+    if (userCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Username or email already exists' });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert the new user into the database
+    const result = await db.query(
+      'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id',
+      [username, email, hashedPassword]
+    );
+
+    const newUserId = result.rows[0].id;
+
+    // Transfer progress from temp user to new user
+    await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
+
+    // Create a new token for the registered user
+    const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
+
+    res.json({ token, userId: newUserId, username });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'An error occurred during registration' });
+  }
+});
+
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (isDevelopment) {
+    console.log('Development mode: Skipping login');
+    return res.status(200).json({ token: 'dev_token', userId: 'dev_user_id' });
+  }
+
+  try {
+    // Check if user exists
+    const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+
+    // Check password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Create and assign token
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token, userId: user.id });
+  } catch (error) {
+    console.error('Error in login:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
+
 // Start the server
+
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

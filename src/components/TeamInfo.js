@@ -1,15 +1,15 @@
 import React from 'react';
 
-function TeamInfo({ team, onLeave, teamBonus, onCollectTeamBonus  }) {
+function TeamInfo({ team, onLeave, teamBonus, onCollectTeamBonus }) {
   return (
     <div className="team-info">
       <div>
-          <p>Team Bonus Available: {teamBonus}</p>
-          <button onClick={onCollectTeamBonus}>Collect Team Bonus</button>
-        </div>
+        <p>Team Bonus Available: {teamBonus}</p>
+        <button onClick={onCollectTeamBonus}>Collect Team Bonus</button>
+      </div>
       <h3>Your Team</h3>
       <ul>
-        {team.members.map(member => (
+        {team && team.members && team.members.map(member => (
           <li key={member.id}>{member.username}</li>
         ))}
       </ul>

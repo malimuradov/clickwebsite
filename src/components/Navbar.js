@@ -1,28 +1,44 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Settings from './Settings';
-import { FaMousePointer, FaBolt } from 'react-icons/fa';
+import UserProfile from './UserProfile';
+import { FaMousePointer, FaBolt, FaUser } from 'react-icons/fa';
 
-function Navbar({ globalClicks, globalCPS, onReset }) {
+function Navbar({ globalClicks, globalCPS, onReset, username }) {
   const [animatedClicks, setAnimatedClicks] = useState(globalClicks);
+  const previousGlobalClicks = useRef(globalClicks);
+  const [showUserProfile, setShowUserProfile] = useState(false);
 
   useEffect(() => {
-    const animationDuration = 1000; // 1 second
-    const steps = 60;
-    const increment = (globalClicks - animatedClicks) / steps;
-    let currentStep = 0;
+    if (globalClicks !== previousGlobalClicks.current) {
+      const animationDuration = 1000; // 1 second
+      const steps = 10;
+      const startValue = previousGlobalClicks.current;
+      const endValue = globalClicks;
+      const increment = (endValue - startValue) / steps;
+      let currentStep = 0;
 
-    const interval = setInterval(() => {
-      if (currentStep < steps) {
-        setAnimatedClicks(prev => Math.round(prev + increment));
-        currentStep++;
-      } else {
-        setAnimatedClicks(globalClicks);
-        clearInterval(interval);
-      }
-    }, animationDuration / steps);
+      const interval = setInterval(() => {
+        if (currentStep < steps) {
+          setAnimatedClicks(prev => {
+            const newValue = Math.round(startValue + increment * (currentStep + 1));
+            return newValue;
+          });
+          currentStep++;
+        } else {
+          setAnimatedClicks(endValue);
+          clearInterval(interval);
+        }
+      }, animationDuration / steps);
 
-    return () => clearInterval(interval);
+      previousGlobalClicks.current = globalClicks;
+
+      return () => clearInterval(interval);
+    }
   }, [globalClicks]);
+
+  const toggleUserProfile = () => {
+    setShowUserProfile(!showUserProfile);
+  };
 
   const getColor = (value) => {
     const hue = Math.min(value / 10, 120); // Max green at 1200 CPS
@@ -40,7 +56,7 @@ function Navbar({ globalClicks, globalCPS, onReset }) {
       borderBottom: '1px solid #e0e0e0',
       boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     }}>
-      <div></div>
+      <div></div>     
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <FaMousePointer size={24} color="#007bff" />
@@ -56,8 +72,16 @@ function Navbar({ globalClicks, globalCPS, onReset }) {
           </div>
           <div style={{ fontSize: '12px', color: '#6c757d' }}>Global CPS</div>
         </div>
+        
       </div>
-      <Settings onReset={onReset} />
+      <div>
+        <div onClick={toggleUserProfile} style={{ cursor: 'pointer' }}>
+          <FaUser /> {username}
+        </div>
+        {showUserProfile && <UserProfile onClose={toggleUserProfile} />} 
+        
+        <Settings onReset={onReset} />
+      </div>
     </nav>
   );
 }
