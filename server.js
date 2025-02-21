@@ -340,7 +340,7 @@ app.post('/api/register', async (req, res) => {
 
     // Insert the new user into the database
     const result = await db.query(
-      'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id',
+      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
       [username, email, hashedPassword]
     );
 
@@ -358,6 +358,7 @@ app.post('/api/register', async (req, res) => {
     res.status(500).json({ error: 'An error occurred during registration' });
   }
 });
+
 
 
 app.post('/api/login', async (req, res) => {
@@ -378,7 +379,7 @@ app.post('/api/login', async (req, res) => {
     const user = result.rows[0];
 
     // Check password
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -391,6 +392,7 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 
 
