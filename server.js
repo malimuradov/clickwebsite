@@ -364,21 +364,31 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   const { tempUserId, username, password, email } = req.body;
 
-  // Check if username is provided and not empty
-  if (!username || username.trim() === '') {
-    return res.status(400).json({ error: 'Username is required' });
+  console.log('Registration attempt:', { tempUserId, username, email }); // Log registration attempt
+
+  // Check if all required fields are provided
+  if (!username || !password || !email) {
+    console.log('Missing required fields');
+    return res.status(400).json({ error: 'All fields are required' });
   }
 
+  // Check if username is not empty
+  if (username.trim() === '') {
+    console.log('Empty username provided');
+    return res.status(400).json({ error: 'Username cannot be empty' });
+  }
   try {
     // Check if username or email already exists
     const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
     if (userCheck.rows.length > 0) {
+      console.log('Username or email already exists');
       return res.status(400).json({ error: 'Username or email already exists' });
     }
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    console.log('Inserting new user into database');
     // Insert the new user into the database
     const result = await db.query(
       'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
@@ -386,21 +396,25 @@ app.post('/api/register', async (req, res) => {
     );
 
     const newUserId = result.rows[0].id;
+    console.log('New user created with ID:', newUserId);
 
     // Transfer progress from temp user to new user
     if (tempUserId) {
+      console.log('Transferring progress from temp user:', tempUserId);
       await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
     }
 
     // Create a new token for the registered user
     const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
 
+    console.log('Registration successful');
     res.json({ token, userId: newUserId, username });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'An error occurred during registration' });
+    res.status(500).json({ error: 'An error occurred during registration', details: error.message });
   }
 });
+
 
 
 
