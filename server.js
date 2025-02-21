@@ -353,6 +353,7 @@ app.post('/api/register', async (req, res) => {
     const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
 
     res.json({ token, userId: newUserId, username });
+    console.log(`User ${username} registered successfully`);
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'An error occurred during registration' });
