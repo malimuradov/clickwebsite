@@ -1,27 +1,10 @@
 import React from 'react';
+import { cursorSkins, cursorEffects, cursorAbilities } from '../data/cursorData';
 
 function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedCursor }) {
-  const cursorSkins = [
-    { id: 'default', name: 'Default Cursor', cost: 0, image: '/cursor-images/default-cursor.png' },
-    { id: 'gold', name: 'Gold Cursor', cost: 1000, image: '/cursor-images/mouseByFreepik.png' },
-    { id: 'dragon', name: 'Dragon Cursor', cost: 5000, image: '/cursor-images/dragonByIcongeek26.png' },
-  ];
-
-  const cursorEffects = [
-    { id: 'none', name: 'No Effect', cost: 0 },
-    { id: 'fire', name: 'Fire Trail', cost: 2000 },
-    { id: 'glow', name: 'Glow Effect', cost: 3000 },
-  ];
-
-  const cursorAbilities = [
-    { id: 'none', name: 'No Ability', cost: 0 },
-    { id: 'fireBreath', name: 'Fire Breath', cost: 5000 },
-    { id: 'iceBlast', name: 'Ice Blast', cost: 7000 },
-  ];
-
   const handleUpgrade = (type, item) => {
     if (totalClicks >= item.cost) {
-      onUpgrade(type, item.id, { cost: item.cost, cursorImage: item.image });
+      onUpgrade(type, item.id);
     }
   };
 
@@ -43,36 +26,40 @@ function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedC
           {equippedCursor === skin.id && <span> (Equipped)</span>}
         </div>
       ))}
-
+      
+      
       <h3>Cursor Effects</h3>
       {cursorEffects.map(effect => (
         <div key={effect.id}>
+          <img src={effect.image} alt={effect.name} style={{ width: '20px', height: '20px' }} />
           <span>{effect.name} - Cost: {effect.cost}</span>
-          <button 
-            onClick={() => handleUpgrade('cursorEffect', effect)} 
-            disabled={totalClicks < effect.cost}
+          <button
+          onClick={() => handleUpgrade('cursorUpgrade', effect)}
+          disabled={totalClicks < effect.cost || unlockedCursors.includes(effect.id)}
           >
-            Buy
+            {unlockedCursors.includes(effect.id)? 'Owned' : 'Buy'}
           </button>
-        </div>
+          {equippedCursor === effect.id && <span> (Equipped)</span>}
+          </div>
       ))}
-
+      
       <h3>Cursor Abilities</h3>
       {cursorAbilities.map(ability => (
         <div key={ability.id}>
+          <img src={ability.image} alt={ability.name} style={{ width: '20px', height: '20px' }} />
           <span>{ability.name} - Cost: {ability.cost}</span>
-          <button 
-            onClick={() => handleUpgrade('cursorAbility', ability)} 
-            disabled={totalClicks < ability.cost}
+          <button
+          onClick={() => handleUpgrade('cursorUpgrade', ability)}
+          disabled={totalClicks < ability.cost || unlockedCursors.includes(ability.id)}
           >
-            Buy
+            {unlockedCursors.includes(ability.id)? 'Owned' : 'Buy'}
           </button>
-        </div>
+          {equippedCursor === ability.id && <span> (Equipped)</span>}
+          </div>
       ))}
     </div>
   );
 }
 
 export default CursorUpgradePopup;
-
 

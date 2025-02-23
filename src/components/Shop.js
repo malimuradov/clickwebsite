@@ -13,7 +13,6 @@ function Shop({
   onUnlockChat,
   chatUnlocked,
   gamblingUnlocked,
-  onCursorUpgrade,
   unlockedCursors,
   equippedCursor,
   cursorImage
@@ -80,8 +79,8 @@ function Shop({
       }
     };
 
-    const handleCursorUpgrade = (cursorData) => {
-      onUpgrade('cursorUpgrade', null, cursorData);
+    const handleCursorUpgrade = (cursorData, cursorId) => {
+      onUpgrade(cursorData, null, cursorId);
     };
 
     const renderItemGroup = (category) => {

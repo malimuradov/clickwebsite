@@ -33,6 +33,8 @@ let teams = new Map();
 let userClicks = new Map();
 let recentMessages = [];
 let cursors = {};
+let lastSkinUpdate = 0;
+const SKIN_UPDATE_INTERVAL = 30000; // 10 seconds
 
 // Middleware
 app.use(express.json());
@@ -49,6 +51,16 @@ function updateAllUsers() {
   io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   io.emit('updateRecentMessages', recentMessages);
   io.emit('updateCursors', cursors);
+  // update user skins every SKIN_UPDATE_INTERVAL seconds
+  const now = Date.now();
+  if (now - lastSkinUpdate > SKIN_UPDATE_INTERVAL) {
+    io.emit('updateUserSkins', Array.from(onlineUsers.entries()).map(([id, user]) => ({
+      id,
+      cursorSkin: user.cursorSkin
+    })));
+    lastSkinUpdate = now;
+  }
+  
   const oneMinuteAgo = Date.now() - 60000;
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
 }
@@ -118,7 +130,7 @@ async function syncUserClicksWithDB(userId, clicks) {
 
 // Socket.io event handlers
 io.on('connection', (socket) => {
-  console.log('New client connected');
+  console.log('New client connected', socket.id);
 
   socket.on('authenticate', (clientToken) => {
     let userId, username;
@@ -148,7 +160,8 @@ io.on('connection', (socket) => {
     socket.userId = userId;
 
     // Update the onlineUsers map
-    onlineUsers.set(userId, { id: userId, username });
+    // Modify the line where we set the user in the onlineUsers map (around line 134)
+    onlineUsers.set(userId, { id: userId, username, cursorSkin: 'default' });
     
     // Send the token back to the client
     socket.emit('authentication', { token: clientToken, userId, username });
@@ -229,6 +242,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('changeCursorSkin', (newSkin) => {
+    const user = onlineUsers.get(socket.userId);
+    if (user) {
+      user.cursorSkin = newSkin;
+      onlineUsers.set(socket.userId, user);
+      io.emit('updateUserSkins', Array.from(onlineUsers.entries()).map(([id, user]) => ({
+        id,
+        cursorSkin: user.cursorSkin
+      })));
+    }
+  });
+
   socket.on('incrementCount', (clickValue) => {
     clickCount += 1;
     clicks.push(Date.now());
@@ -250,7 +275,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected');
+    console.log('Client disconnected', socket.id);
     onlineUsers.delete(socket.userId);
     delete cursors[socket.userId];
     updateAllUsers();

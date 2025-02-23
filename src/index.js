@@ -1,17 +1,21 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import { SocketProvider } from './contexts/SocketContext';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
-  <React.StrictMode>
-    <App />
-    <footer>
-    <h3><a href="https://www.flaticon.com/free-icons/mouse-clicker" title="mouse clicker icons">Mouse clicker icons created by Andrean Prabowo - Flaticon</a></h3>
-    </footer>
-  </React.StrictMode>
+  // <React.StrictMode>
+    
+    <SocketProvider>
+      <App />
+      <footer>
+      <h3><a href="https://www.flaticon.com/free-icons/mouse-clicker" title="mouse clicker icons">Mouse clicker icons created by Andrean Prabowo - Flaticon</a></h3>
+      </footer>
+    </SocketProvider>
+  // </React.StrictMode>
   
 );
 

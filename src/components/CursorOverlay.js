@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
+import { cursorSkins } from '../data/cursorData';
+
 
 function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbility }) {
   const [localCursor, setLocalCursor] = useState({ x: 0, y: 0 });
@@ -10,6 +12,10 @@ function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbili
   const clickTimeoutRef = useRef(null);
   const trailRef = useRef([]);
 
+  const getCursorImage = (skinId) => {
+    const skin = cursorSkins.find(skin => skin.id === skinId);
+    return skin ? skin.image : '/cursor-images/default.png';
+  };
   useEffect(() => {
     const handleMouseMove = (e) => {
       const newPosition = {
@@ -146,13 +152,14 @@ function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbili
             top: `${cursor.y}px`,
             width: '20px',
             height: '20px',
-            backgroundImage: `url(${cursor.skin || userSkin})`,
+            backgroundImage: `url(${getCursorImage(cursor.skin || userSkin)})`,
             backgroundSize: 'contain',
             backgroundRepeat: 'no-repeat',
             transform: 'translate(-50%, -50%)',
           }}
         />
       ))}
+
     </div>
   );
 }

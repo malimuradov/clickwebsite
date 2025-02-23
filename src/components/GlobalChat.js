@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import '../styles/GlobalChat.css';
-
-const isDevelopment = process.env.NODE_ENV === 'development';
-const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
-const socket = io(socketUrl);
+import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 
 function GlobalChat({ totalClicks, onSendMessage, username, onUsernameChange }) {
+  
+  const { onlineUsers, socket } = useOnlineUsers();
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isChangingUsername, setIsChangingUsername] = useState(false);

@@ -32,7 +32,6 @@ function UnlockedContent({
   onCursorUpgrade,
   unlockedCursors,
   equippedCursor,
-  cursorImage,
   onUsernameChange,
   teamBonus,
   onCollectTeamBonus,
@@ -75,7 +74,6 @@ function UnlockedContent({
         onUnlockChat={onUnlockChat}
         chatUnlocked={chatUnlocked}
         gamblingUnlocked={gamblingUnlocked}
-        onCursorUpgrade={onCursorUpgrade}
         unlockedCursors={unlockedCursors}
         equippedCursor={equippedCursor}
         userSkin={userSkin}
