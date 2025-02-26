@@ -132,45 +132,57 @@ async function syncUserClicksWithDB(userId, clicks) {
 io.on('connection', (socket) => {
   console.log('New client connected', socket.id);
 
-  socket.on('authenticate', (clientToken) => {
-    let userId, username;
-
-    if (clientToken) {
-      // Verify existing token
+  socket.on('authenticate', async (token) => {
+    let userId = null;
+    let username = null;
+    let isTemporary = true;
+    if (token) {
+      // Verify the token
       try {
-        const decoded = jwt.verify(clientToken, JWT_SECRET);
-        userId = decoded.userId;
+        const decoded = jwt.verify(token, JWT_SECRET);
+        userId = decoded.id;
         username = decoded.username;
+        isTemporary = false;
+
+        // Check if the user exists in the database
+        if (!isDevelopment) {
+          const user = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+          if (user.rows.length === 0) {
+            // User not found in database, treat as temporary
+            isTemporary = true;
+            userId = null;
+            username = null;
+          }
+        }
       } catch (error) {
         console.error('Token verification failed:', error);
-        // If token is invalid, we'll create a new one below
+        // Token is invalid or expired, treat as temporary
+        userId = null;
+        username = null;
       }
     }
 
-    if (!userId) {
+    if (isTemporary) {
       // Generate new temporary user
       userId = crypto.randomBytes(16).toString('hex');
       username = generateUniqueUsername();
-
-      // Create a new token
-      clientToken = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
     }
 
     // Store the userId in the socket object for future reference
     socket.userId = userId;
 
     // Update the onlineUsers map
-    // Modify the line where we set the user in the onlineUsers map (around line 134)
-    onlineUsers.set(userId, { id: userId, username, cursorSkin: 'default' });
-    
-    // Send the token back to the client
-    socket.emit('authentication', { token: clientToken, userId, username });
+    onlineUsers.set(userId, { id: userId, username, cursorSkin: 'default', isTemporary });
+
+    // Send the authentication result back to the client
+    socket.emit('authenticationResult', { userId, username, isTemporary });
 
     // Emit initial data to the authenticated user
     socket.emit('updateRecentMessages', recentMessages);
     socket.emit('updateCount', clickCount);
     io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   });
+
 
   socket.on('setUsername', (newUsername) => {
     if (isUsernameTaken(newUsername)) {
@@ -338,6 +350,22 @@ function loadServerData() {
   });
 }
 
+async function loadUserData(userId) {
+  try {
+    // Load user progress from the database
+    const result = await db.query('SELECT * FROM progress WHERE user_id = $1', [userId]);
+    if (result.rows.length > 0) {
+      const userProgress = result.rows[0];
+      // Update relevant variables with user progress
+      // For example:
+      // clickCount = userProgress.total_clicks;
+      // You might need to adjust this based on your actual database schema
+    }
+  } catch (error) {
+    console.error('Error loading user data:', error);
+  }
+}
+
 // Initialization and intervals
 loadServerData();
 setInterval(updateGlobalCPS, 100);
@@ -371,9 +399,9 @@ app.post('/api/register', async (req, res) => {
 
     const newUserId = result.rows[0].id;
 
-    // Transfer progress from temp user to new user
-    await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
-
+    if (tempUserId) {
+      await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
+    }
     // Create a new token for the registered user
     const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
 

@@ -10,7 +10,6 @@ import GlobalChat from './GlobalChat';
 function UnlockedContent({ 
   totalClicks, 
   onPurchase, 
-  onUnlockDrawing, 
   onUpgrade, 
   bestCPS,
   flatAutoClicker,

@@ -1,21 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 import { cursorSkins } from '../data/cursorData';
+import { useSocket } from '../contexts/SocketContext';
 
 
-function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbility }) {
+function CursorOverlay({ currentUserId, userSkin, userEffect, userAbility }) {
   const [localCursor, setLocalCursor] = useState({ x: 0, y: 0 });
-  const { onlineUsers, socket } = useOnlineUsers();
+  const { onlineUsers } = useOnlineUsers();
   const [isClicking, setIsClicking] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
   const [showClickAnimation, setShowClickAnimation] = useState(false);
   const clickTimeoutRef = useRef(null);
   const trailRef = useRef([]);
+  const [userSkins, setUserSkins] = useState({});
+  const { socket } = useSocket();
 
   const getCursorImage = (skinId) => {
     const skin = cursorSkins.find(skin => skin.id === skinId);
     return skin ? skin.image : '/cursor-images/default.png';
   };
+  useEffect(() => {
+    if (socket) {
+      socket.on('updateUserSkins', (updatedSkins) => {
+        setUserSkins(updatedSkins);
+        console.log('Updated cursor skins:', updatedSkins);
+      });
+
+      return () => {
+        socket.off('updateUserSkins');
+      };
+    }
+  }, [socket]);
+
   useEffect(() => {
     const handleMouseMove = (e) => {
       const newPosition = {
@@ -140,27 +155,44 @@ function CursorOverlay({ cursors, currentUserId, userSkin, userEffect, userAbili
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
       {renderCursorEffect()}
       {renderCursorAbility()}
-      {Object.entries(cursors).map(([id, cursor]) => (
-        <div
-          key={id}
-          style={{
-            position: 'absolute',
-            left: `${cursor.x}%`,
-            top: `${cursor.y}px`,
-            width: '20px',
-            height: '20px',
-            backgroundImage: `url(${getCursorImage(cursor.skin || userSkin)})`,
-            backgroundSize: 'contain',
-            backgroundRepeat: 'no-repeat',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
+      {Object.entries(onlineUsers).map(([id, user]) => (
+        <div key={id}>
+          <div
+            style={{
+              position: 'absolute',
+              left: `${user.x}%`,
+              top: `${user.y}px`,
+              width: '20px',
+              height: '20px',
+              backgroundImage: `url(${getCursorImage(userSkins[id] || userSkin)})`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: `${user.x}%`,
+              top: `${user.y + 20}px`,
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              color: 'white',
+              padding: '2px 4px',
+              borderRadius: '3px',
+              fontSize: '12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {user.username}
+          </div>
+        </div>
       ))}
-
     </div>
+
   );
 }
 

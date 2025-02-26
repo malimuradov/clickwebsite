@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ClickButton from './ClickButton';
 import Stats from './Stats';
-import { useOnlineUsers } from '../contexts/OnlineUsersContext';
+
+import { useSocket } from '../contexts/SocketContext';
 
 function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, bestCPS: propBestCPS }) {
-  const { onlineUsers, socket } = useOnlineUsers();
+  const { socket, userId, username, cursors, setUsername } = useSocket();
   const [count, setCount] = useState(0);
   const [clientCPS, setClientCPS] = useState(0);
   const clicksRef = useRef([]);
@@ -88,9 +89,6 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
   }, [calculateClickValue, processClick, isTimerEnabled, isTimerRunning, startTimer]);
 
   useEffect(() => {
-    socket.on('updateCount', (newCount) => {
-      setCount(newCount);
-    });
 
     let simulationInterval;
     if (isSimulating) {
@@ -124,8 +122,6 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
     }, 5);
 
     return () => {
-      socket.off('updateCount');
-      socket.off('updateGlobalCPS');
       clearInterval(intervalId);
       if (simulationInterval) clearInterval(simulationInterval);
     };

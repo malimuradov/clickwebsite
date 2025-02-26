@@ -1,8 +1,10 @@
 import React from 'react';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
+import { useSocket } from '../contexts/SocketContext';
 
 function OnlineUsers({ currentUser, team }) {
-  const { onlineUsers, socket } = useOnlineUsers();
+  const {socket} = useSocket();
+  const { onlineUsers } = useOnlineUsers();
 
   const handleInvite = (userId) => {
     socket.emit('inviteToTeam', userId);

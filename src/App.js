@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import io from 'socket.io-client';
 import Clicker from './components/Clicker';
 import UnlockedContent from './components/UnlockedContent';
 import './App.css';
@@ -9,12 +8,11 @@ import Navbar from './components/Navbar';
 import { OnlineUsersProvider } from './contexts/OnlineUsersContext';
 import { cursorSkins, cursorEffects, cursorAbilities } from './data/cursorData';
 
-import { SocketProvider, useSocket } from './contexts/SocketContext';
+import { useSocket } from './contexts/SocketContext';
 
 function App() {
   // Auth
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Game state
   const [unlocked, setUnlocked] = useState(false);
@@ -45,7 +43,8 @@ function App() {
   const [globalClicks, setGlobalClicks] = useState(0);
   const [globalCPS, setGlobalCPS] = useState(0);
   // const [socket, setSocket] = useSocket();
-  const { socket, userId, username, cursors, setUsername } = useSocket();
+  const { socket, userId, username, cursors, setUsername, isLoggedIn, setIsLoggedIn } = useSocket();
+
   // const [cursors, setCursors] = useState({});
   // const [username, setUsername] = useState('');
   // const [userId, setUserId] = useState(null);
@@ -53,8 +52,8 @@ function App() {
   const [team, setTeam] = useState(null);
   const [teamInvites, setTeamInvites] = useState([]);
 
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
+  // const isDevelopment = process.env.NODE_ENV === 'development';
+  // const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
 
   // // Socket connection
   // useEffect(() => {
@@ -98,11 +97,23 @@ function App() {
   // }, [socketUrl]);
 
   // Auth handle
-  const handleLogin = (token) => {
+  const handleLogin = useCallback((token) => {
     setIsLoggedIn(true);
-    // Reconnect socket with new token or perform other necessary actions
-  };
+    // You might want to emit an authentication event to the server here
+    if (socket) {
+      socket.emit('authenticate', token);
+    }
+  }, [socket]);
 
+  const handleLogout = useCallback(() => {
+    setIsLoggedIn(false);
+    // Clear the token from localStorage
+    localStorage.removeItem('token');
+    // You might want to emit a logout event to the server here
+    if (socket) {
+      socket.emit('logout');
+    }
+  }, [socket]);
   // Socket event listeners
   useEffect(() => {
     if (socket) {
@@ -388,7 +399,7 @@ function App() {
     <div className="App" onMouseMove={handleMouseMove}>
       <div className="content">
         <OnlineUsersProvider>
-          <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} />
+          <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} isLoggedIn={isLoggedIn} onLogin={handleLogin} onLogout={handleLogout} />
           <main style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Clicker
                 onUnlock={handleUnlock} 
@@ -396,14 +407,12 @@ function App() {
                 flatClickBonus={flatClickBonus}
                 percentageClickBonus={percentageClickBonus}
                 bestCPS={bestCPS}
-                onlineUsers={onlineUsers}
               />
           </main>
           {unlocked ? (
             <UnlockedContent
               totalClicks={totalClicks} 
               onPurchase={handlePurchase} 
-              onUnlockDrawing={handleUnlockDrawing}
               onUpgrade={handleUpgrade}
               bestCPS={bestCPS}
               flatAutoClicker={flatAutoClicker}

@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/UserProfile.css';
 
-function UserProfile({ onClose, onLogin }) {
+function UserProfile({ isOpen, onClose, isLoggedIn, onLogin, onLogout }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [isRegistering, setIsRegistering] = useState(true);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [tempUserId, setTempUserId] = useState(null);
 
   useEffect(() => {
-    // Retrieve the temporary user ID from localStorage
     const storedTempUserId = localStorage.getItem('tempUserId');
     if (storedTempUserId) {
       setTempUserId(storedTempUserId);
@@ -30,8 +29,8 @@ function UserProfile({ onClose, onLogin }) {
         body: JSON.stringify({ 
           email, 
           password,
-          username: isRegistering ? username : undefined, // Include username only for registration
-          tempUserId: isRegistering ? tempUserId : undefined // Include tempUserId only for registration
+          username: isRegistering ? username : undefined,
+          tempUserId: isRegistering ? tempUserId : undefined
         }),
       });
 
@@ -54,7 +53,6 @@ function UserProfile({ onClose, onLogin }) {
           setError(data.message || 'An error occurred');
         }
       } else {
-        // If the response is not JSON, log it and set a generic error
         const text = await response.text();
         console.error('Unexpected response:', text);
         setError('Unexpected response from server. Please try again later.');
@@ -65,46 +63,63 @@ function UserProfile({ onClose, onLogin }) {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('userToken');
+    onLogout();
+    onClose();
+  };
+  if (!isOpen) return null;
+
   return (
     <div className="user-profile-overlay">
       <div className="user-profile-popup">
-        <h2>{isRegistering ? 'Register' : 'Login'}</h2>
-        {error && <p className="error-message">{error}</p>}
-        <form onSubmit={handleSubmit}>
-          {isRegistering && (
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button type="submit">{isRegistering ? 'Register' : 'Login'}</button>
-        </form>
-        <p>
-          {isRegistering
-            ? 'Already have an account? '
-            : "Don't have an account? "}
-          <span onClick={() => setIsRegistering(!isRegistering)}>
-            {isRegistering ? 'Login' : 'Register'}
-          </span>
-        </p>
-        <button onClick={onClose}>Close</button>
+        <button className="close-button" onClick={onClose}>&times;</button>
+        {isLoggedIn ? (
+          <>
+            <h2>User Profile</h2>
+            <p>You are logged in.</p>
+            <button onClick={handleLogout}>Logout</button>
+          </>
+        ) : (
+          <>
+            <h2>{isRegistering ? 'Register' : 'Login'}</h2>
+            {error && <p className="error-message">{error}</p>}
+            <form onSubmit={handleSubmit}>
+              {isRegistering && (
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              )}
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button type="submit">{isRegistering ? 'Register' : 'Login'}</button>
+            </form>
+            <p>
+              {isRegistering
+                ? 'Already have an account? '
+                : "Don't have an account? "}
+              <span onClick={() => setIsRegistering(!isRegistering)}>
+                {isRegistering ? 'Login' : 'Register'}
+              </span>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

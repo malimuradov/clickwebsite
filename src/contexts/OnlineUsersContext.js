@@ -1,32 +1,31 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import io from 'socket.io-client';
+import { useSocket } from './SocketContext'; // Import the useSocket hook
 
 const OnlineUsersContext = createContext();
 
-const isDevelopment = process.env.NODE_ENV === 'development';
-const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
-const socket = io(socketUrl);
-
 export const OnlineUsersProvider = ({ children }) => {
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const { socket } = useSocket(); // Use the socket from SocketContext
 
   useEffect(() => {
-    const handleUpdateOnlineUsers = (users) => {
-      setOnlineUsers(users);
-    };
+    if (socket) {
+      const handleUpdateOnlineUsers = (users) => {
+        setOnlineUsers(users);
+      };
 
-    socket.on('updateOnlineUsers', handleUpdateOnlineUsers);
+      socket.on('updateOnlineUsers', handleUpdateOnlineUsers);
 
-    // Request initial online users list
-    socket.emit('getOnlineUsers');
+      // Request initial online users list
+      socket.emit('getOnlineUsers');
 
-    return () => {
-      socket.off('updateOnlineUsers', handleUpdateOnlineUsers);
-    };
-  }, []);
+      return () => {
+        socket.off('updateOnlineUsers', handleUpdateOnlineUsers);
+      };
+    }
+  }, [socket]);
 
   return (
-    <OnlineUsersContext.Provider value={{ onlineUsers, socket }}>
+    <OnlineUsersContext.Provider value={{ onlineUsers }}>
       {children}
     </OnlineUsersContext.Provider>
   );
