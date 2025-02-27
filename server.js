@@ -34,7 +34,7 @@ let userClicks = new Map();
 let recentMessages = [];
 let cursors = {};
 let lastSkinUpdate = 0;
-const SKIN_UPDATE_INTERVAL = 10000; // 10 seconds
+const SKIN_UPDATE_INTERVAL = 1000; // 10 seconds
 
 // Middleware
 app.use(express.json());
