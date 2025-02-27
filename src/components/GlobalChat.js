@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import io from 'socket.io-client';
 import '../styles/GlobalChat.css';
 import { useOnlineUsers } from '../contexts/OnlineUsersContext';
 import { useSocket } from '../contexts/SocketContext';
