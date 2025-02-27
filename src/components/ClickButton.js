@@ -13,7 +13,6 @@ function ClickButton({ onClick }) {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        cursor: 'pointer',
         userSelect: 'none',
         fontSize: '18px',
         fontWeight: 'bold',

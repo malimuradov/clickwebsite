@@ -45,8 +45,7 @@ function UnlockedContent({
       {/* <CursorOverlay cursors={cursors} username={username}/> */}
       <CursorOverlay 
         cursors={cursors} 
-        currentUserId={currentUserId} 
-        userSkin={userSkin}
+        currentUsername={username} 
         userEffect={userEffect}
         userAbility={userAbility}
       />

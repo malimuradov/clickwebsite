@@ -6,10 +6,12 @@ const SocketContext = createContext();
 export function SocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [userId, setUserId] = useState(null);
+  const [equippedCursor, setEquippedCursor] = useState(null);
   const [username, setUsername] = useState('');
   const [cursors, setCursors] = useState({});
   const [isConnected, setIsConnected] = useState(false);
   const [isTemporary, setIsTemporary] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
@@ -22,16 +24,59 @@ export function SocketProvider({ children }) {
       console.log('Connected to the server');
       setIsConnected(true);
 
-      // Attempt to authenticate with stored token
-      try {
-        const storedToken = localStorage.getItem('userToken');
-        newSocket.emit('authenticate', storedToken);
-      } catch (err) {
-        console.warn('No token present:', err);
-        setIsTemporary(true);
+      // Check for existing auth token
+      const token = localStorage.getItem('token');
+      if (token) {
+        console.log('Authenticating with token');
+        newSocket.emit('authenticate', token);
+      } else {
+        console.log('No token found, creating a new temporary account');
+        // Check for cached temporary account data
+        const cachedData = localStorage.getItem('tempAccountData');
+        if (cachedData) {
+          console.log('Using cached temporary account data');
+          const { username, equippedCursor } = JSON.parse(cachedData);
+          setUsername(username);
+          setEquippedCursor(equippedCursor);
+          setIsTemporary(true);
+          newSocket.emit('setTempAccount', { username, equippedCursor });
+        } else {
+          console.log('Creating a new temporary account');
+          setIsTemporary(true);
+          newSocket.emit('setTempAccount');
+        }
       }
     });
 
+    newSocket.on('authenticationSuccess', ({ userId, username }) => {
+      setUserId(userId);
+      setUsername(username);
+      setIsLoggedIn(true);
+      setIsTemporary(false);
+      // Clear temporary account data if it exists
+      localStorage.removeItem('tempAccountData');
+    });
+
+    newSocket.on('authenticationFailure', () => {
+      // Authentication failed, fallback to temporary account
+      const cachedData = localStorage.getItem('tempAccountData');
+      if (cachedData) {
+        const { username, equippedCursor } = JSON.parse(cachedData);
+        setUsername(username);
+        setEquippedCursor(equippedCursor);
+        setIsTemporary(true);
+        newSocket.emit('setTempAccount', { username, equippedCursor });
+      } else {
+        newSocket.emit('setTempAccount');
+      }
+    });
+
+    newSocket.on('tempAccResult', (username) => {
+      if(username) {
+        setUsername(username);
+        setIsTemporary(true);
+      }
+    })
     newSocket.on('connect_error', (err) => {
       console.error('Failed to connect to the server:', err);
       setIsConnected(false);
@@ -39,22 +84,6 @@ export function SocketProvider({ children }) {
 
     newSocket.on('updateCursors', (updatedCursors) => {
       setCursors(updatedCursors);
-    });
-
-    newSocket.on('authenticationResult', ({ userId, username, isTemporary }) => {
-      setUserId(userId);
-      setUsername(username);
-      setIsTemporary(isTemporary);
-
-      if (!isTemporary) {
-        // If it's not a temporary account, we can store the token
-        // This assumes the server sends back a token for non-temporary accounts
-        try {
-          localStorage.setItem('userToken', newSocket.auth.token);
-        } catch (err) {
-          console.error('Failed to store token:', err);
-        }
-      }
     });
 
     setSocket(newSocket);
@@ -91,7 +120,9 @@ export function SocketProvider({ children }) {
     <SocketContext.Provider value={{ 
       socket, 
       userId, 
-      username, 
+      username,
+      equippedCursor,
+      setEquippedCursor,
       cursors, 
       setUsername,
       isTemporary,

@@ -4,7 +4,13 @@
   min-height: 100vh;
 }
 
+.HideCursor * {
+  cursor: none !important;
+}
 
+.HideCursor {
+  cursor:none;
+}
 
 .App-logo {
   height: 40vmin;

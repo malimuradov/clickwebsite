@@ -20,6 +20,7 @@ function App() {
   const [bestCPS, setBestCPS] = useState(0);
   const [clickMultiplier, setClickMultiplier] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isTemporaryAccount, setIsTemporaryAccount] = useState(false);
 
   // Upgrades
   const [flatClickBonus, setFlatClickBonus] = useState(0);
@@ -34,7 +35,6 @@ function App() {
 
   // Cursor
   const [unlockedCursors, setUnlockedCursors] = useState([]);
-  const [equippedCursor, setEquippedCursor] = useState(null);
   const [cursorEffect, setCursorEffect] = useState(null);
   const [cursorAbility, setCursorAbility] = useState(null)
 
@@ -43,7 +43,7 @@ function App() {
   const [globalClicks, setGlobalClicks] = useState(0);
   const [globalCPS, setGlobalCPS] = useState(0);
   // const [socket, setSocket] = useSocket();
-  const { socket, userId, username, cursors, setUsername, isLoggedIn, setIsLoggedIn } = useSocket();
+  const { socket, userId, username, equippedCursor, setEquippedCursor, cursors, setUsername, isLoggedIn, setIsLoggedIn } = useSocket();
 
   // const [cursors, setCursors] = useState({});
   // const [username, setUsername] = useState('');
@@ -99,21 +99,51 @@ function App() {
   // Auth handle
   const handleLogin = useCallback((token) => {
     setIsLoggedIn(true);
-    // You might want to emit an authentication event to the server here
+    setIsTemporaryAccount(false);
     if (socket) {
       socket.emit('authenticate', token);
     }
+    // Clear temporary account data
+    // localStorage.removeItem('tempAccountData');
   }, [socket]);
 
   const handleLogout = useCallback(() => {
     setIsLoggedIn(false);
-    // Clear the token from localStorage
     localStorage.removeItem('token');
-    // You might want to emit a logout event to the server here
     if (socket) {
       socket.emit('logout');
     }
+    // Load temporary account data if it exists
+    const cachedData = localStorage.getItem('tempAccountData');
+    // if (cachedData) {
+    //   const { username, equippedCursor, gameState } = JSON.parse(cachedData);
+    //   setUsername(username);
+    //   setEquippedCursor(equippedCursor);
+    //   setIsTemporaryAccount(true);
+    //   // Load other game state data as needed
+    //   // For example:
+    //   setTotalClicks(gameState.totalClicks);
+    //   setDrawingUnlocked(gameState.drawingUnlocked);
+    //   // ... (load other state variables)
+    // } else {
+    //   // Generate new temporary account
+    //   const tempUsername = generateRandomUsername();
+    //   setUsername(tempUsername);
+    //   setIsTemporaryAccount(true);
+    //   socket.emit('setTempAccount', { username: tempUsername });
+    // }
   }, [socket]);
+
+  const upgradeToPermAccount = useCallback((token) => {
+    if (socket) {
+      socket.emit('upgradeAccount', token);
+    }
+    setIsTemporaryAccount(false);
+    setIsLoggedIn(true);
+    // Clear temporary account data
+    localStorage.removeItem('tempAccountData');
+  }, [socket]);
+
   // Socket event listeners
   useEffect(() => {
     if (socket) {
@@ -190,9 +220,20 @@ function App() {
         cursorAbility,
         chatUnlocked
       };
-      localStorage.setItem('gameState', JSON.stringify(gameState));
+      if (isTemporaryAccount) {
+        // Save to tempAccountData in localStorage
+        localStorage.setItem('tempAccountData', JSON.stringify({
+          username,
+          equippedCursor,
+          gameState
+        }));
+      } else {
+        // Save to regular gameState in localStorage
+        localStorage.setItem('gameState', JSON.stringify(gameState));
+      }
     }
-  }, [isLoaded, totalClicks, drawingUnlocked, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, gamblingUnlocked, chatUnlocked, unlockedCursors, equippedCursor, username, team, teamInvites]);
+  }, [isLoaded, totalClicks, drawingUnlocked, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, gamblingUnlocked, chatUnlocked, unlockedCursors, equippedCursor, username, team, teamInvites, isTemporaryAccount]);
+  
 
   useEffect(() => {
     const storedData = localStorage.getItem('gameState');
@@ -253,6 +294,8 @@ function App() {
       setTotalClicks(prevClicks => prevClicks - cost);
       setUnlockedCursors(prev => [...prev, cursorId]);
       setEquippedCursor(cursorId);
+      console.log(equippedCursor)
+      socket.emit('changeCursorSkin', cursorId);
     }
   }, [totalClicks]);
 
@@ -363,6 +406,8 @@ function App() {
     setPercentageClickBonus(1);
     setFlatAutoClicker(0);
     setPercentAutoClicker(0);
+    setUnlockedCursors([]);
+    setEquippedCursor('default');
     localStorage.removeItem('gameState');
   }, []);
 
@@ -396,7 +441,7 @@ function App() {
   };
 
   return (
-    <div className="App" onMouseMove={handleMouseMove}>
+    <div className={`App ${unlocked ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
       <div className="content">
         <OnlineUsersProvider>
           <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} isLoggedIn={isLoggedIn} onLogin={handleLogin} onLogout={handleLogout} />

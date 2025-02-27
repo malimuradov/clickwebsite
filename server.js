@@ -34,7 +34,7 @@ let userClicks = new Map();
 let recentMessages = [];
 let cursors = {};
 let lastSkinUpdate = 0;
-const SKIN_UPDATE_INTERVAL = 30000; // 10 seconds
+const SKIN_UPDATE_INTERVAL = 10000; // 10 seconds
 
 // Middleware
 app.use(express.json());
@@ -54,10 +54,10 @@ function updateAllUsers() {
   // update user skins every SKIN_UPDATE_INTERVAL seconds
   const now = Date.now();
   if (now - lastSkinUpdate > SKIN_UPDATE_INTERVAL) {
-    io.emit('updateUserSkins', Array.from(onlineUsers.entries()).map(([id, user]) => ({
-      id,
-      cursorSkin: user.cursorSkin
-    })));
+    io.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+      user.username,
+      { cursorSkin: user.cursorSkin }
+    ])));
     lastSkinUpdate = now;
   }
   
@@ -86,7 +86,7 @@ function cleanupInactiveUsers() {
   for (const [socketId, user] of onlineUsers.entries()) {
     if (now - user.lastActivity > 30000) { // 10 seconds of inactivity
       onlineUsers.delete(socketId);
-      delete cursors[socketId];
+      delete cursors[user.username];
     }
   }
   updateAllUsers();
@@ -136,6 +136,7 @@ io.on('connection', (socket) => {
     let userId = null;
     let username = null;
     let isTemporary = true;
+    let userData = null;
     if (token) {
       // Verify the token
       try {
@@ -152,6 +153,8 @@ io.on('connection', (socket) => {
             isTemporary = true;
             userId = null;
             username = null;
+          } else {
+            userData = user.rows[0];
           }
         }
       } catch (error) {
@@ -160,6 +163,8 @@ io.on('connection', (socket) => {
         userId = null;
         username = null;
       }
+    } else {
+      socket.emit('authenticationFailure');
     }
 
     if (isTemporary) {
@@ -170,18 +175,45 @@ io.on('connection', (socket) => {
 
     // Store the userId in the socket object for future reference
     socket.userId = userId;
-
+    socket.username = username;
     // Update the onlineUsers map
     onlineUsers.set(userId, { id: userId, username, cursorSkin: 'default', isTemporary });
 
     // Send the authentication result back to the client
-    socket.emit('authenticationResult', { userId, username, isTemporary });
+    socket.emit('authenticationResult', { userId, username, isTemporary, userData });
 
     // Emit initial data to the authenticated user
     socket.emit('updateRecentMessages', recentMessages);
     socket.emit('updateCount', clickCount);
-    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+    socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+      user.username,
+      { cursorSkin: user.cursorSkin }
+    ])));
+    //io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   });
+
+  socket.on('setTempAccount', (username, equippedCursor) => {
+    if (username) {
+      userId = crypto.randomBytes(16).toString('hex');
+      socket.userId = userId;
+      socket.username = username;
+      onlineUsers.set(userId, { username, cursorSkin: equippedCursor ? equippedCursor : 'default', isTemporary: true });
+      socket.emit('tempAccResult');
+    } else {
+      userId = crypto.randomBytes(16).toString('hex');
+      username = generateUniqueUsername();
+      socket.userId = userId;
+      socket.username = username;
+      onlineUsers.set(userId, { username, cursorSkin: 'default', isTemporary: true });
+      socket.emit('tempAccResult', username);
+    }
+    socket.emit('updateRecentMessages', recentMessages);
+    socket.emit('updateCount', clickCount);
+    socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+      user.username,
+      { cursorSkin: user.cursorSkin }
+    ])));
+  })
 
 
   socket.on('setUsername', (newUsername) => {
@@ -203,7 +235,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('cursorMove', ({ x, y, username }) => {
-    cursors[socket.userId] = { x, y, username };
+    cursors[username] = { x, y };
     io.emit('updateCursors', cursors);
   });
 
@@ -259,10 +291,10 @@ io.on('connection', (socket) => {
     if (user) {
       user.cursorSkin = newSkin;
       onlineUsers.set(socket.userId, user);
-      io.emit('updateUserSkins', Array.from(onlineUsers.entries()).map(([id, user]) => ({
-        id,
-        cursorSkin: user.cursorSkin
-      })));
+      io.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+        user.username,
+        { cursorSkin: user.cursorSkin }
+      ])));
     }
   });
 
@@ -289,7 +321,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected', socket.id);
     onlineUsers.delete(socket.userId);
-    delete cursors[socket.userId];
+    delete cursors[socket.username];
     updateAllUsers();
 
     for (let [teamId, team] of teams) {
@@ -308,6 +340,54 @@ io.on('connection', (socket) => {
       }
     }
   });
+
+socket.on('createPermanentAccount', async (data) => {
+  const { username, email, password } = data;
+  const userId = socket.userId;
+
+  if (!isDevelopment) {
+    try {
+      // Check if username or email already exists
+      const existingUser = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+      if (existingUser.rows.length > 0) {
+        socket.emit('accountCreationError', 'Username or email already exists');
+        return;
+      }
+
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Insert the new user into the database
+      const newUser = await db.query(
+        'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING *',
+        [userId, username, email, hashedPassword]
+      );
+
+      // Update the user's data in the onlineUsers map
+      const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
+      onlineUsers.set(userId, updatedUser);
+
+      // Generate a new token for the permanent account
+      const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+
+      // Send the new authentication data back to the client
+      socket.emit('accountCreated', { token, userId, username, userData: newUser.rows[0] });
+
+      // Update all clients with the new user list
+      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+    } catch (error) {
+      console.error('Error creating permanent account:', error);
+      socket.emit('accountCreationError', 'An error occurred while creating the account');
+    }
+  } else {
+    // In development mode, simulate account creation
+    const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
+    onlineUsers.set(userId, updatedUser);
+    const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+    socket.emit('accountCreated', { token, userId, username, userData: { id: userId, username, email } });
+    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+  }
+});
 });
 
 // Data persistence functions
