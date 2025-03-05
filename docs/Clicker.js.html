@@ -1,10 +1,36 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: Clicker.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: Clicker.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ClickButton from './ClickButton';
 import Stats from './Stats';
-import '../styles/Clicker.css'; // Import the CSS file
 
 import { useSocket } from '../contexts/SocketContext';
-
 /**
  * @typedef {Object} ClickerProps
  * @property {function} onUnlock - Function to call when unlocking content
@@ -81,7 +107,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
     socket.emit('incrementCount', clickValue);
     const now = Date.now();
     clicksRef.current.push(now);
-    const recentClicks = clicksRef.current.filter(click => now - click < 1000);
+    const recentClicks = clicksRef.current.filter(click => now - click &lt; 1000);
     cpsRef.current = recentClicks.length;
     const newTotalClicks = totalClicks + clickValue;
     onUnlock(newTotalClicks, Math.max(clientCPS, propBestCPS));
@@ -93,7 +119,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
       timeLeftRef.current = remainingTime;
       setTimeLeft(Math.ceil(remainingTime));
 
-      if (remainingTime <= 0) {
+      if (remainingTime &lt;= 0) {
         stopTimer();
       }
     }
@@ -102,7 +128,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
   const handleClick = useCallback(() => {
     const clickValue = calculateClickValue();
     processClick(clickValue);
-    if (isTimerEnabled && !isTimerRunning) {
+    if (isTimerEnabled &amp;&amp; !isTimerRunning) {
       startTimer();
     }
   }, [calculateClickValue, processClick, isTimerEnabled, isTimerRunning, startTimer]);
@@ -117,7 +143,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
 
     const intervalId = setInterval(() => {
       const now = Date.now();
-      const recentClicks = clicksRef.current.filter(click => now - click < 1000);
+      const recentClicks = clicksRef.current.filter(click => now - click &lt; 1000);
       clicksRef.current = recentClicks;
       const instantaneousCPS = recentClicks.length;
       cpsRef.current = instantaneousCPS;
@@ -133,7 +159,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
         timeLeftRef.current = remainingTime;
         setTimeLeft(Math.ceil(remainingTime));
 
-        if (remainingTime <= 0) {
+        if (remainingTime &lt;= 0) {
           stopTimer();
         }
       }
@@ -147,14 +173,14 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
 
   useEffect(() => {
     const handleKeyPress = (event) => {
-      if (event.key === selectedKey && !keyPressed) {
+      if (event.key === selectedKey &amp;&amp; !keyPressed) {
         event.preventDefault(); // Prevent default behavior
         setKeyPressed(true);
       }
     };
 
     const handleKeyRelease = (event) => {
-      if (event.key === selectedKey && keyPressed) {
+      if (event.key === selectedKey &amp;&amp; keyPressed) {
         setKeyPressed(false);
         handleClick();
       }
@@ -197,70 +223,87 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
   }, [listeningForKey]);
 
   return (
-    <div className="clicker-container">
-      <div className="left-section">
-        <ClickButton onClick={handleClick} />
-      </div>
-      <div className="middle-section">
-        <Stats cps={clientCPS} bestCps={propBestCPS} totalClicks={totalClicks} />
-        <button onClick={toggleSimulation}>
-          {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
-        </button>
-      </div>
-      <div className="right-section">
-        {/* Timer controls */}
-        <div>
-          <label>
-            <input 
-              type="checkbox" 
-              checked={isTimerEnabled}
-              onChange={toggleTimerEnable}
-            />
-            Enable Timer
-          </label>
-          <input 
-            type="number" 
-            value={timerDuration} 
-            onChange={(e) => setTimerDuration(Number(e.target.value))}
-            min="1"
+    &lt;div>
+      &lt;ClickButton onClick={handleClick} />
+      &lt;Stats cps={clientCPS} bestCps={propBestCPS} totalClicks={totalClicks} />
+      &lt;button onClick={toggleSimulation}>
+        {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
+      &lt;/button>
+      {/* Timer controls */}
+      &lt;div>
+        &lt;label>
+          &lt;input 
+            type="checkbox" 
+            checked={isTimerEnabled}
+            onChange={toggleTimerEnable}
           />
-          <button onClick={resetTimer}>
-            Reset Timer
-          </button>
-          {isTimerEnabled && (isTimerRunning ? (
-            <p>Time left: {timeLeft}s</p>
-          ) : (
-            <p>Click to start timer</p>
+          Enable Timer
+        &lt;/label>
+        &lt;input 
+          type="number" 
+          value={timerDuration} 
+          onChange={(e) => setTimerDuration(Number(e.target.value))}
+          min="1"
+        />
+        &lt;button onClick={resetTimer}>
+          Reset Timer
+        &lt;/button>
+        {isTimerEnabled &amp;&amp; (isTimerRunning ? (
+          &lt;p>Time left: {timeLeft}s&lt;/p>
+        ) : (
+          &lt;p>Click to start timer&lt;/p>
+        ))}
+      &lt;/div>
+
+      {/* Key selection */}
+      &lt;div>
+        &lt;button onClick={startListeningForKey}>
+          {listeningForKey ? 'Press any key...' : 'Listen for key'}
+        &lt;/button>
+        {selectedKey &amp;&amp; !listeningForKey &amp;&amp; (
+          &lt;p>Selected key: {selectedKey}&lt;/p>
+        )}
+      &lt;/div>
+
+      {/* Display records */}
+      &lt;div>
+        &lt;h3>Records:&lt;/h3>
+        &lt;ul>
+          {records.map((record, index) => (
+            &lt;li key={index}>
+              Clicks: {record.clicks}, 
+              Avg CPS: {record.averageCPS.toFixed(2)}, 
+              Duration: {record.duration}s
+            &lt;/li>
           ))}
-        </div>
-
-        {/* Key selection */}
-        <div>
-          <button onClick={startListeningForKey}>
-            {listeningForKey ? 'Press any key...' : 'Listen for key'}
-          </button>
-          {selectedKey && !listeningForKey && (
-            <p>Selected key: {selectedKey}</p>
-          )}
-        </div>
-
-        {/* Display records */}
-        <div>
-          <h3>Records:</h3>
-          <ul>
-            {records.map((record, index) => (
-              <li key={index}>
-                Clicks: {record.clicks}, 
-                Avg CPS: {record.averageCPS.toFixed(2)}, 
-                Duration: {record.duration}s
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
+        &lt;/ul>
+      &lt;/div>
+    &lt;/div>
   );
 }
 
 export default Clicker;
 
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#Clicker">Clicker</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Sat Mar 01 2025 21:49:03 GMT+0300 (Moscow Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

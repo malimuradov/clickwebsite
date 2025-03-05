@@ -2,36 +2,55 @@ import React, { useState, useEffect, useRef } from 'react';
 import { cursorSkins } from '../data/cursorData';
 import { useSocket } from '../contexts/SocketContext';
 
-
-
 function CursorOverlay({ currentUsername, userEffect, userAbility }) {
-  const [localCursor, setLocalCursor ] = useState({ x: 100, y: 100 });
-  const [cursors, setCursors ] = useState({});
+  const [localCursor, setLocalCursor] = useState({ x: 100, y: 100 });
+  const [cursors, setCursors] = useState({});
   const [isClicking, setIsClicking] = useState(false);
   const [showClickAnimation, setShowClickAnimation] = useState(false);
   const clickTimeoutRef = useRef(null);
   const trailRef = useRef([]);
-  const [userSkins, setUserSkins ] = useState({});
+  const [userSkins, setUserSkins] = useState({});
   const { socket } = useSocket();
   const [cursorsImages, setUserCursorImages] = useState({});
+  const [cursorAdjustments, setCursorAdjustments] = useState({});
+
+  const defaultCursor = { cursorSkinName: 'default', cursorImage: '/cursor-images/defaultMouseByFreepik.png', xAdjust: '6.5px', yAdjust: '10px' };
 
   const getCursorImage = (skinId) => {
-    const skin = cursorSkins.find(skin => skin.id == skinId.cursorSkin);
-    return skin ? skin.image : '/cursor-images/default.png';
+    const skin = cursorSkins.find(skin => skin.id === skinId.cursorSkin);
+    return skin ? skin.image : defaultCursor.cursorImage;
   };
 
+  const getCursorAdjustments = (skinId) => {
+    const skin = cursorSkins.find(skin => skin.id === skinId.cursorSkin);
+    return skin ? { xAdjust: skin.xAdjust, yAdjust: skin.yAdjust } : { xAdjust: defaultCursor.xAdjust, yAdjust: defaultCursor.yAdjust };
+  };
+
+  const initializeCursorAdjustments = () => {
+    const initialAdjustments = Object.fromEntries(
+      Object.keys(cursors).map(username => [
+        username,
+        getCursorAdjustments({ cursorSkin: defaultCursor.cursorSkinName })
+      ])
+    );
+    setCursorAdjustments(initialAdjustments);
+  };
 
   useEffect(() => {
     if (socket) {
       socket.on('updateUserSkins', (updatedSkins) => {
         setUserSkins(updatedSkins);
         updateCursorsImages();
+        updateCursorAdjustments(updatedSkins);
       });
 
       socket.on('updateCursors', (updatedCursors) => {
         setCursors(updatedCursors);
         if (Object.keys(cursorsImages).length === 0) {
           updateCursorsImages();
+        }
+        if (Object.keys(cursorAdjustments).length === 0) {
+          initializeCursorAdjustments();
         }
       });
 
@@ -41,7 +60,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
         socket.off('updateCursors');
       };
     }
-  }, [socket, userSkins, cursorsImages, cursors]);
+  }, [socket, userSkins, cursorsImages, cursors, cursorAdjustments]);
 
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -94,6 +113,16 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
       ])
     );
     setUserCursorImages(newCursorsImages);
+  };
+
+  const updateCursorAdjustments = (updatedSkins) => {
+    const newCursorAdjustments = Object.fromEntries(
+      Object.entries(updatedSkins).map(([username, skinId]) => [
+        username,
+        getCursorAdjustments(skinId)
+      ])
+    );
+    setCursorAdjustments(prevAdjustments => ({ ...prevAdjustments, ...newCursorAdjustments }));
   };
 
   const renderCursorEffect = () => {
@@ -176,36 +205,58 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
     }
   };
 
+  const isDefaultCursor = !userSkins[currentUsername] || userSkins[currentUsername].cursorSkin === 'default';
+
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1000 }}>
       {renderCursorEffect()}
       {renderCursorAbility()}
-      {/* {console.log(userSkins[currentUsername])}
-      {console.log(getCursorImage(userSkins[currentUsername]))} */}
-      <div
-        style={{
-          position: 'absolute',
-          left: `calc(${localCursor.x}% + 6.5px)`,
-          top: `${localCursor.y + 10}px`,
-          width: '20px',
-          height: '20px',
-          backgroundImage: `url(${cursorsImages[currentUsername]?.cursorImage  })`,
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          transform: 'translate(-50%, -50%)',
-        }}
-      />
+      {/* Render Local Cursor */}
+      {!isDefaultCursor && (
+        <div>
+          <div
+            style={{
+              position: 'absolute',
+              left: `calc(${localCursor.x}% + ${cursorAdjustments[currentUsername]?.xAdjust || defaultCursor.xAdjust})`,
+              top: `${localCursor.y + parseInt(cursorAdjustments[currentUsername]?.yAdjust || defaultCursor.yAdjust)}px`,
+              width: '20px',
+              height: '20px',
+              backgroundImage: `url(${cursorsImages[currentUsername]?.cursorImage})`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: `${localCursor.x}%`,
+              top: `${localCursor.y + 30}px`,
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(231, 0, 0, 0.5)',
+              color: 'white',
+              padding: '2px 4px',
+              borderRadius: '3px',
+              fontSize: '12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            (YOU) { currentUsername } 
+          </div>
+        </div>
+      )}
+
       {/* Render online cursors */}
       {Object.entries(cursors).filter(([username]) => username !== currentUsername).map(([username, user]) => (
         <div key={username}>
           <div
             style={{
               position: 'absolute',
-              left: `calc(${user.x}% + 6.5px)`,
-              top: `${user.y + 10}px`,
+              left: `calc(${user.x}% + ${cursorAdjustments[username]?.xAdjust || defaultCursor.xAdjust})`,
+              top: `${user.y + parseInt(cursorAdjustments[username]?.yAdjust || defaultCursor.yAdjust)}px`,
               width: '20px',
               height: '20px',
-              backgroundImage: `url(${cursorsImages[username]?.cursorImage})`,
+              backgroundImage: `url(${cursorsImages[username]?.cursorImage ? cursorsImages[username]?.cursorImage : defaultCursor.cursorImage})`,
               backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               transform: 'translate(-50%, -50%)',
@@ -230,7 +281,6 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
         </div>
       ))}
     </div>
-
   );
 }
 

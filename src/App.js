@@ -21,6 +21,7 @@ function App() {
   const [clickMultiplier, setClickMultiplier] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isTemporaryAccount, setIsTemporaryAccount] = useState(false);
+  const [hideCursor, setHideCursor] = useState(false);
 
   // Upgrades
   const [flatClickBonus, setFlatClickBonus] = useState(0);
@@ -408,7 +409,7 @@ function App() {
     setPercentAutoClicker(0);
     setUnlockedCursors([]);
     setEquippedCursor('default');
-    localStorage.removeItem('gameState');
+    localStorage.removeItem('tempAccountData');
   }, []);
 
   const handleUnlockDrawing = useCallback(() => {
@@ -441,7 +442,7 @@ function App() {
   };
 
   return (
-    <div className={`App ${unlocked ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
+    <div className={`App ${hideCursor ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
       <div className="content">
         <OnlineUsersProvider>
           <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} isLoggedIn={isLoggedIn} onLogin={handleLogin} onLogout={handleLogout} />
