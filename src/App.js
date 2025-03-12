@@ -6,13 +6,15 @@ import './App.css';
 import Navbar from './components/Navbar';
 
 import { OnlineUsersProvider } from './contexts/OnlineUsersContext';
-import { cursorSkins, cursorEffects, cursorAbilities } from './data/cursorData';
+import { cursorSkins } from './data/cursorData';
 
 import { useSocket } from './contexts/SocketContext';
 
 function App() {
   // Auth
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isTemporaryAccount, setIsTemporaryAccount] = useState(false);
 
   // Game state
   const [unlocked, setUnlocked] = useState(false);
@@ -20,8 +22,8 @@ function App() {
   const [bestCPS, setBestCPS] = useState(0);
   const [clickMultiplier, setClickMultiplier] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isTemporaryAccount, setIsTemporaryAccount] = useState(false);
   const [hideCursor, setHideCursor] = useState(false);
+  const [isShopOpen, setIsShopOpen] = useState(false);
 
   // Upgrades
   const [flatClickBonus, setFlatClickBonus] = useState(0);
@@ -30,82 +32,32 @@ function App() {
   const [percentAutoClicker, setPercentAutoClicker] = useState(0);
 
   // Unlockables
-  const [drawingUnlocked, setDrawingUnlocked] = useState(false);
-  const [gamblingUnlocked, setGamblingUnlocked] = useState(false);
   const [chatUnlocked, setChatUnlocked] = useState(false);
 
-  // Cursor
-  const [unlockedCursors, setUnlockedCursors] = useState([]);
-  const [cursorEffect, setCursorEffect] = useState(null);
-  const [cursorAbility, setCursorAbility] = useState(null)
+  // Cursor customization
+  const [unlockedCursorSkins, setUnlockedCursorSkins] = useState(['default']);
+  const [unlockedCursorEffects, setUnlockedCursorEffects] = useState(['default']);
+  const [unlockedCursorAbilities, setUnlockedCursorAbilities] = useState(['default']);
+  const [equippedCursorSkin, setEquippedCursorSkin] = useState('default');
+  const [equippedCursorEffect, setEquippedCursorEffect] = useState('default');
+  const [equippedCursorAbility, setEquippedCursorAbility] = useState('default');
 
   // Multiplayer
   const [teamBonus, setTeamBonus] = useState(0);
   const [globalClicks, setGlobalClicks] = useState(0);
   const [globalCPS, setGlobalCPS] = useState(0);
-  // const [socket, setSocket] = useSocket();
-  const { socket, userId, username, equippedCursor, setEquippedCursor, cursors, setUsername, isLoggedIn, setIsLoggedIn } = useSocket();
-
-  // const [cursors, setCursors] = useState({});
-  // const [username, setUsername] = useState('');
-  // const [userId, setUserId] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [team, setTeam] = useState(null);
   const [teamInvites, setTeamInvites] = useState([]);
+  const { socket, userId, username, equippedCursor, setEquippedCursor, cursors, setUsername } = useSocket();
 
-  // const isDevelopment = process.env.NODE_ENV === 'development';
-  // const socketUrl = isDevelopment ? 'http://localhost:4000' : 'http://52.59.228.62:8080';
-
-  // // Socket connection
-  // useEffect(() => {
-  //   const storedToken = localStorage.getItem('userToken');
-  //   const newSocket = io(socketUrl);
-
-  //   newSocket.on('authentication', ({ token, userId, username }) => {
-  //     localStorage.setItem('token', token);
-  //     setUserId(userId);
-  //     setUsername(username);
-  //   });
-
-  //   // Authenticate with the server
-  //   const token = localStorage.getItem('token');
-  //   if (token) {
-  //     newSocket.emit('authenticate', token);
-  //   } else {
-  //     newSocket.emit('authenticate', null);
-  //   }
-
-  //   newSocket.on('connect', () => {
-  //     console.log('Connected to the server');
-  //   });
-
-  //   newSocket.on('connect_error', (err) => {
-  //     console.error('Failed to connect to the server:', err);
-  //   });
-
-  //   // newSocket.on('authentication', ({ token, userId, username }) => {
-  //   //   localStorage.setItem('userToken', token);
-  //   //   setUserId(userId);
-  //   //   setUsername(username);
-  //   // });
-  //   setSocket(newSocket)
-
-  //   newSocket.on('updateCursors', (updatedCursors) => {
-  //     setCursors(updatedCursors);
-  //   });
-
-  //   return () => newSocket.close();
-  // }, [socketUrl]);
-
-  // Auth handle
+  // Auth handlers
   const handleLogin = useCallback((token) => {
     setIsLoggedIn(true);
     setIsTemporaryAccount(false);
     if (socket) {
       socket.emit('authenticate', token);
     }
-    // Clear temporary account data
-    // localStorage.removeItem('tempAccountData');
   }, [socket]);
 
   const handleLogout = useCallback(() => {
@@ -114,25 +66,6 @@ function App() {
     if (socket) {
       socket.emit('logout');
     }
-    // Load temporary account data if it exists
-    const cachedData = localStorage.getItem('tempAccountData');
-    // if (cachedData) {
-    //   const { username, equippedCursor, gameState } = JSON.parse(cachedData);
-    //   setUsername(username);
-    //   setEquippedCursor(equippedCursor);
-    //   setIsTemporaryAccount(true);
-    //   // Load other game state data as needed
-    //   // For example:
-    //   setTotalClicks(gameState.totalClicks);
-    //   setDrawingUnlocked(gameState.drawingUnlocked);
-    //   // ... (load other state variables)
-    // } else {
-    //   // Generate new temporary account
-    //   const tempUsername = generateRandomUsername();
-    //   setUsername(tempUsername);
-    //   setIsTemporaryAccount(true);
-    //   socket.emit('setTempAccount', { username: tempUsername });
-    // }
   }, [socket]);
 
   const upgradeToPermAccount = useCallback((token) => {
@@ -141,45 +74,34 @@ function App() {
     }
     setIsTemporaryAccount(false);
     setIsLoggedIn(true);
-    // Clear temporary account data
     localStorage.removeItem('tempAccountData');
   }, [socket]);
 
   // Socket event listeners
+  // Socket event listeners
   useEffect(() => {
     if (socket) {
-      socket.on('updateCount', (newCount) => {
-        setGlobalClicks(newCount);
-      });
-  
-      socket.on('updateGlobalCPS', (newCPS) => {
-        setGlobalCPS(newCPS);
-      });
-
+      socket.on('updateCount', setGlobalClicks);
+      socket.on('updateGlobalCPS', setGlobalCPS);
       socket.on('teamClickBonus', (bonus) => {
-        setTeamBonus(prevBonus => {
-          const numPrevBonus = Number(prevBonus) || 0;
-          const numBonus = Number(bonus) || 0;
-          return Number((numPrevBonus + numBonus).toFixed(2));
-        });
+        setTeamBonus(prevBonus => Number((Number(prevBonus) + Number(bonus)).toFixed(2)));
       });
-
       socket.on('updateOnlineUsers', (users) => {
         setOnlineUsers(Array.isArray(users) ? users : []);
       });
-
       socket.on('teamInvite', (inviterId) => {
         setTeamInvites(prev => [...prev, inviterId]);
       });
-
-      socket.on('teamUpdate', (newTeam) => {
-        setTeam(newTeam);
-      });
+      socket.on('teamUpdate', setTeam);
 
       if (username) {
         socket.emit('setUsername', username);
       }
 
+      // Send the equipped cursor skin to the server when connection is established
+      if (equippedCursorSkin && equippedCursorSkin !== 'default') {
+        socket.emit('changeCursorSkin', equippedCursorSkin);
+      }
       return () => {
         socket.off('updateCount');
         socket.off('updateGlobalCPS');
@@ -189,7 +111,7 @@ function App() {
         socket.off('teamClickBonus');
       };
     }
-  }, [socket, username]);
+  }, [socket, username, equippedCursorSkin]);
 
   // Username change handler
   useEffect(() => {
@@ -203,38 +125,28 @@ function App() {
     if (isLoaded) {
       const gameState = {
         totalClicks,
-        drawingUnlocked,
         bestCPS,
         clickMultiplier,
         flatClickBonus,
         percentageClickBonus,
         flatAutoClicker,
         percentAutoClicker,
-        gamblingUnlocked,
         chatUnlocked,
-        unlockedCursors,
-        equippedCursor,
+        unlockedCursorSkins,
+        equippedCursorSkin,
+        equippedCursorEffect,
+        equippedCursorAbility,
         username,
         team,
         teamInvites,
-        cursorEffect,
-        cursorAbility,
-        chatUnlocked
       };
       if (isTemporaryAccount) {
-        // Save to tempAccountData in localStorage
-        localStorage.setItem('tempAccountData', JSON.stringify({
-          username,
-          equippedCursor,
-          gameState
-        }));
+        localStorage.setItem('tempAccountData', JSON.stringify({ username, equippedCursorSkin, gameState }));
       } else {
-        // Save to regular gameState in localStorage
         localStorage.setItem('gameState', JSON.stringify(gameState));
       }
     }
-  }, [isLoaded, totalClicks, drawingUnlocked, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, gamblingUnlocked, chatUnlocked, unlockedCursors, equippedCursor, username, team, teamInvites, isTemporaryAccount]);
-  
+  }, [isLoaded, totalClicks, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, chatUnlocked, unlockedCursorSkins, equippedCursorSkin, equippedCursorEffect, equippedCursorAbility, username, team, teamInvites, isTemporaryAccount]);
 
   useEffect(() => {
     const storedData = localStorage.getItem('gameState');
@@ -242,38 +154,28 @@ function App() {
       const parsedData = JSON.parse(storedData);
       setTotalClicks(parsedData.totalClicks || 0);
       setUnlocked(parsedData.totalClicks >= 100);
-      setDrawingUnlocked(parsedData.drawingUnlocked || false);
       setBestCPS(parsedData.bestCPS || 0);
       setClickMultiplier(parsedData.clickMultiplier || 1);
       setFlatClickBonus(parsedData.flatClickBonus || 0);
       setPercentageClickBonus(parsedData.percentageClickBonus || 1);
       setFlatAutoClicker(parsedData.flatAutoClicker || 0);
       setPercentAutoClicker(parsedData.percentAutoClicker || 0);
-      setGamblingUnlocked(parsedData.gamblingUnlocked || false);
       setChatUnlocked(parsedData.chatUnlocked || false);
-      setUnlockedCursors(parsedData.unlockedCursors || []);
-      setEquippedCursor(parsedData.equippedCursor || null);
+      setUnlockedCursorSkins(parsedData.unlockedCursorSkins || ['default']);
+      setEquippedCursorSkin(parsedData.equippedCursorSkin || 'default');
+      setEquippedCursorEffect(parsedData.equippedCursorEffect || 'default');
+      setEquippedCursorAbility(parsedData.equippedCursorAbility || 'default');
       setUsername(parsedData.username || '');
       setTeam(parsedData.team || null);
       setTeamInvites(parsedData.teamInvites || []);
-      setChatUnlocked(parsedData.chatUnlocked || false);
-      setCursorAbility(parsedData.cursorAbility || null);
-      setCursorEffect(parsedData.cursorEffect || null);
-      // Check if username exists, if not generate a new one
-      const storedUsername = parsedData.username;
-      if (storedUsername) {
-        setUsername(storedUsername);
-      } else {
-        // const newUsername = generateRandomUsername();
-        // setUsername(newUsername);
+
+      // If socket is already connected, send the equipped cursor skin
+      if (socket && parsedData.equippedCursorSkin && parsedData.equippedCursorSkin !== 'default') {
+        socket.emit('changeCursorSkin', parsedData.equippedCursorSkin);
       }
-    } else {
-      // // If no stored data, generate a new username
-      // const newUsername = generateRandomUsername();
-      // setUsername(newUsername);
     }
     setIsLoaded(true);
-  }, []);
+  }, [socket]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -290,15 +192,14 @@ function App() {
     setBestCPS(prevBestCPS => Math.max(prevBestCPS, newCPS));
   }, []);
 
-  const handleCursorUpgrade = useCallback((cursorId, cost, newCursorImage) => {
+  const handleCursorUpgrade = useCallback((cursorId, cost) => {
     if (totalClicks >= cost) {
       setTotalClicks(prevClicks => prevClicks - cost);
-      setUnlockedCursors(prev => [...prev, cursorId]);
-      setEquippedCursor(cursorId);
-      console.log(equippedCursor)
+      setUnlockedCursorSkins(prev => [...prev, cursorId]);
+      setEquippedCursorSkin(cursorId);
       socket.emit('changeCursorSkin', cursorId);
     }
-  }, [totalClicks]);
+  }, [totalClicks, socket]);
 
   const handlePurchase = useCallback((cost) => {
     if (totalClicks >= cost) {
@@ -320,22 +221,24 @@ function App() {
       case 'percentageClickBonus':
         setPercentageClickBonus(prev => prev + value);
         break;
-      case 'cursorUpgrade':
-        const cursorInfo = cursorSkins.find(cursor => cursor.id === additionalData);
-        if (cursorInfo) {
-          handleCursorUpgrade(cursorInfo.id, cursorInfo.cost, cursorInfo.cursorImage);
-        }
+      case 'unlockCursorSkin':
+        // Add the cursor to unlockedCursorSkins if it's not already there
+        setUnlockedCursorSkins(prev => {
+          if (!prev.includes(value)) {
+            return [...prev, value];
+          }
+          return prev;
+        });
         break;
-      case 'cursorEffect':
-        setCursorEffect(value);
+      case 'equipCursorSkin':
+        // Set the equipped cursor skin
+        setEquippedCursorSkin(value);
+        // Send the change to the server
+        socket.emit('changeCursorSkin', value);
         break;
-      case 'cursorAbility':
-        setCursorAbility(value);
-        break;
+      // Add cases for cursor abilities and effects if needed
     }
-  }, [handleCursorUpgrade]);
-
-  
+  }, [socket, username]);
 
   const collectTeamBonus = useCallback(() => {
     setTotalClicks(prevClicks => prevClicks + teamBonus);
@@ -354,17 +257,17 @@ function App() {
     return () => clearInterval(intervalId);
   }, [flatAutoClicker, percentAutoClicker, bestCPS]);
 
-  // Cursor effect
-  useEffect(() => {
-    if (equippedCursor) {
-      document.body.style.cursor = `url(${equippedCursor}), auto`;
-    } else {
-      document.body.style.cursor = 'default';
-    }
-    return () => {
-      document.body.style.cursor = 'default';
-    };
-  }, [equippedCursor]);
+  // // Cursor effect
+  // useEffect(() => {
+  //   if (equippedCursorSkin) {
+  //     document.body.style.cursor = `url(${equippedCursorSkin}), auto`;
+  //   } else {
+  //     document.body.style.cursor = 'default';
+  //   }
+  //   return () => {
+  //     document.body.style.cursor = 'default';
+  //   };
+  // }, [equippedCursorSkin]);
 
   // Multiplayer handlers
   const handleMouseMove = useCallback((event) => {
@@ -400,24 +303,15 @@ function App() {
   const resetGame = useCallback(() => {
     setUnlocked(false);
     setTotalClicks(0);
-    setDrawingUnlocked(false);
     setBestCPS(0);
     setClickMultiplier(1);
     setFlatClickBonus(0);
     setPercentageClickBonus(1);
     setFlatAutoClicker(0);
     setPercentAutoClicker(0);
-    setUnlockedCursors([]);
-    setEquippedCursor('default');
+    setUnlockedCursorSkins(['default']);
+    setEquippedCursorSkin('default');
     localStorage.removeItem('tempAccountData');
-  }, []);
-
-  const handleUnlockDrawing = useCallback(() => {
-    setDrawingUnlocked(true);
-  }, []);
-
-  const handleUnlockGambling = useCallback(() => {
-    setGamblingUnlocked(true);
   }, []);
 
   const handleUnlockChat = useCallback(() => {
@@ -427,7 +321,6 @@ function App() {
   const handleGamble = useCallback((cost) => {
     if (totalClicks >= cost) {
       setTotalClicks(prevClicks => prevClicks - cost);
-      // Add gambling logic here
     }
   }, [totalClicks]);
 
@@ -441,11 +334,24 @@ function App() {
     setUsername(newUsername);
   };
 
+  const toggleShop = () => {
+    setIsShopOpen(!isShopOpen);
+  };
+
   return (
-    <div className={`App ${hideCursor ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
+    <div className={`App ${equippedCursorSkin !== 'default' || hideCursor ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
       <div className="content">
         <OnlineUsersProvider>
-          <Navbar globalClicks={globalClicks} globalCPS={globalCPS} onReset={resetGame} username={username} isLoggedIn={isLoggedIn} onLogin={handleLogin} onLogout={handleLogout} />
+          <Navbar 
+            globalClicks={globalClicks} 
+            globalCPS={globalCPS} 
+            onReset={resetGame} 
+            username={username} 
+            isLoggedIn={isLoggedIn} 
+            onLogin={handleLogin} 
+            onLogout={handleLogout}
+            onToggleShop={toggleShop}
+            />
           <main style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Clicker
                 onUnlock={handleUnlock} 
@@ -457,20 +363,24 @@ function App() {
           </main>
           {unlocked ? (
             <UnlockedContent
+              isOpen={isShopOpen}
+              onClose={() => setIsShopOpen(false)}
               totalClicks={totalClicks} 
               onPurchase={handlePurchase} 
               onUpgrade={handleUpgrade}
               bestCPS={bestCPS}
               flatAutoClicker={flatAutoClicker}
               percentAutoClicker={percentAutoClicker}
-              onUnlockGambling={handleUnlockGambling}
-              gamblingUnlocked={gamblingUnlocked}
               onGamble={handleGamble}
               onUnlockChat={handleUnlockChat}
               chatUnlocked={chatUnlocked}
               onSendMessage={handleSendMessage}
-              unlockedCursors={unlockedCursors}
-              equippedCursor={equippedCursor}
+              unlockedCursorSkins={unlockedCursorSkins}
+              unlockedCursorAbilities={unlockedCursorAbilities}
+              unlockedCursorEffects={unlockedCursorEffects}
+              equippedCursorSkin={equippedCursorSkin}
+              equippedCursorEffect={equippedCursorEffect}
+              equippedCursorAbility={equippedCursorAbility}
               username={username}
               onUsernameChange={handleUsernameChange}
               cursors={cursors}
@@ -482,9 +392,6 @@ function App() {
               onLeaveTeam={handleLeaveTeam}
               teamBonus={teamBonus}
               onCollectTeamBonus={collectTeamBonus}
-              userSkin={equippedCursor}
-              userEffect={cursorEffect}
-              userAbility={cursorAbility}
               currentUserId={userId}
             />
           ) : null}

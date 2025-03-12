@@ -5,13 +5,13 @@ export const cursorSkins = [
 ];
 
 export const cursorEffects = [
-  { id: 'none', name: 'No Effect', cost: 0 },
+  { id: 'effect_none', name: 'No Effect', cost: 0 },
   { id: 'fire', name: 'Fire Trail', cost: 2000 },
   { id: 'glow', name: 'Glow Effect', cost: 3000 },
 ];
 
 export const cursorAbilities = [
-  { id: 'none', name: 'No Ability', cost: 0 },
+  { id: 'ability_none', name: 'No Ability', cost: 0 },
   { id: 'fireBreath', name: 'Fire Breath', cost: 5000 },
   { id: 'iceBlast', name: 'Ice Blast', cost: 7000 },
 ];

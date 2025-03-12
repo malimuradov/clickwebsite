@@ -1,7 +1,8 @@
 import React from 'react';
 import { cursorSkins, cursorEffects, cursorAbilities } from '../data/cursorData';
+import '../styles/CursorUpgradePopup.css'; // Make sure to create this CSS file
 
-function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedCursor }) {
+function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedCursor, onClose }) {
   const handleUpgrade = (type, item) => {
     if (totalClicks >= item.cost) {
       onUpgrade(type, item.id);
@@ -9,8 +10,10 @@ function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedC
   };
 
   return (
-    <div className="cursor-upgrade-popup">
-      <h2>Cursor Upgrades</h2>
+    <div className="cursor-upgrade-popup-overlay">
+      <div className="cursor-upgrade-popup">
+        <button className="close-button" onClick={onClose}>×</button>
+        <h2>Cursor Upgrades</h2>
 
       <h3>Cursor Skins</h3>
       {cursorSkins.map(skin => (
@@ -26,8 +29,8 @@ function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedC
           {equippedCursor === skin.id && <span> (Equipped)</span>}
         </div>
       ))}
-      
-      
+
+
       <h3>Cursor Effects</h3>
       {cursorEffects.map(effect => (
         <div key={effect.id}>
@@ -42,7 +45,7 @@ function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedC
           {equippedCursor === effect.id && <span> (Equipped)</span>}
           </div>
       ))}
-      
+
       <h3>Cursor Abilities</h3>
       {cursorAbilities.map(ability => (
         <div key={ability.id}>
@@ -57,9 +60,11 @@ function CursorUpgradePopup({ onUpgrade, totalClicks, unlockedCursors, equippedC
           {equippedCursor === ability.id && <span> (Equipped)</span>}
           </div>
       ))}
+      </div>
     </div>
   );
 }
+
 
 export default CursorUpgradePopup;
 

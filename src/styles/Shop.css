@@ -1,69 +1,67 @@
-.shop-component {
-  /* Styles for the shop container */
-  background-color: #f0f0f0;
-  border-radius: 10px;
-  padding: 20px;
-  margin-top: 20px;
-}
-
-.shop-component h3 {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-.shop-component .shop-section {
-  margin-bottom: 20px;
-}
-
-.shop-component .shop-section h4 {
-  border-bottom: 2px solid #333;
-  padding-bottom: 5px;
-  margin-bottom: 10px;
-}
-
-.shop-component .shop-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
+.shop {
+  width: 700px;
+  height: 700px;
+  border: 1px solid #ccc;
   padding: 10px;
-  background-color: white;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  overflow-y: auto;
 }
 
-.shop-component .item-icon {
-  font-size: 24px;
-  margin-right: 10px;
+.shop-tabs {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 1rem;
 }
 
-.shop-component .item-name {
-  flex-grow: 1;
-}
-
-.shop-component .item-cost {
-  margin-right: 10px;
-}
-
-.shop-component .item-owned,
-.shop-component .item-effect {
-  margin-left: 10px;
-}
-
-.shop-component button {
-  padding: 5px 10px;
-  background-color: #4CAF50;
-  color: white;
+.shop-tabs button {
+  padding: 0.5rem 1rem;
   border: none;
-  border-radius: 3px;
+  background-color: #f0f0f0;
   cursor: pointer;
 }
 
-.shop-component button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
+.shop-tabs button.active {
+  background-color: #007bff;
+  color: white;
 }
 
-.shop-component .unlockable button:disabled {
-  background-color: #4CAF50;
+.shop-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.shop-item {
+  border: 1px solid #ccc;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.item-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.item-icon, .item-name, .item-cost {
+  margin-bottom: 0.25rem;
+}
+
+.equipped-indicator {
+  color: #007bff;
+  font-weight: bold;
+}
+
+
+button {
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
   opacity: 0.5;
 }
+

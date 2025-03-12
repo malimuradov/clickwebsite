@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import Settings from './Settings';
+import React, { useState, useRef, useEffect } from 'react';
+import { FaMousePointer, FaBolt, FaUser, FaStore } from 'react-icons/fa';
 import UserProfile from './UserProfile';
-import { FaMousePointer, FaBolt, FaUser } from 'react-icons/fa';
+import Settings from './Settings';
 
-function Navbar({ globalClicks, globalCPS, onReset, username, isLoggedIn, onLogin, onLogout }) {
+function Navbar({ globalClicks, globalCPS, onReset, username, isLoggedIn, onLogin, onLogout, onToggleShop }) {
   const [animatedClicks, setAnimatedClicks] = useState(globalClicks);
   const previousGlobalClicks = useRef(globalClicks);
   const [showUserProfile, setShowUserProfile] = useState(false);
@@ -72,16 +72,20 @@ function Navbar({ globalClicks, globalCPS, onReset, username, isLoggedIn, onLogi
           </div>
           <div style={{ fontSize: '12px', color: '#6c757d' }}>Global CPS</div>
         </div>
-        
+
       </div>
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div onClick={onToggleShop} style={{ cursor: 'pointer' }}>
+          <FaStore size={24} color="#007bff" />
+          <span style={{ marginLeft: '5px' }}>Shop</span>
+        </div>
         <div onClick={toggleUserProfile} style={{ cursor: 'pointer' }}>
           <FaUser /> {username}
         </div>
         {showUserProfile && <UserProfile onClose={toggleUserProfile} isLoggedIn={isLoggedIn} onLogin={onLogin} onLogout={onLogout} />} 
-        
         <Settings onReset={onReset} />
       </div>
+
     </nav>
   );
 }

@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { cursorSkins } from '../data/cursorData';
+import { cursorSkins, cursorEffects, cursorAbilities } from '../data/cursorData';
 import { useSocket } from '../contexts/SocketContext';
 
-function CursorOverlay({ currentUsername, userEffect, userAbility }) {
+function CursorOverlay({ 
+  currentUsername, 
+  userEffect, 
+  userAbility,
+  equippedCursorSkin,
+  equippedCursorEffect,
+  equippedCursorAbility,
+ }) {
   const [localCursor, setLocalCursor] = useState({ x: 100, y: 100 });
   const [cursors, setCursors] = useState({});
   const [isClicking, setIsClicking] = useState(false);
@@ -71,7 +78,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
       setLocalCursor(newPosition);
 
       // Update trail for effect
-      if (userEffect === 'fire') {
+      if (equippedCursorEffect === 'fire') {
         trailRef.current.push(newPosition);
         if (trailRef.current.length > 10) {
           trailRef.current.shift();
@@ -103,7 +110,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [userEffect]);
+  }, [equippedCursorEffect]);
 
   const updateCursorsImages = () => {
     const newCursorsImages = Object.fromEntries(
@@ -126,7 +133,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
   };
 
   const renderCursorEffect = () => {
-    switch (userEffect) {
+    switch (equippedCursorEffect) {
       case 'fire':
         return trailRef.current.map((pos, index) => (
           <div
@@ -167,7 +174,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
   const renderCursorAbility = () => {
     if (!showClickAnimation) return null;
 
-    switch (userAbility) {
+    switch (equippedCursorAbility) {
       case 'fireBreath':
         return (
           <div
@@ -205,8 +212,11 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
     }
   };
 
-  const isDefaultCursor = !userSkins[currentUsername] || userSkins[currentUsername].cursorSkin === 'default';
+  // Use equippedCursorSkin instead of checking userSkins
+  const isDefaultCursor = !equippedCursorSkin || equippedCursorSkin === 'default';
 
+  // Get the current skin data
+  const currentSkinData = cursorSkins.find(skin => skin.id === equippedCursorSkin) || defaultCursor;
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1000 }}>
       {renderCursorEffect()}
@@ -217,11 +227,11 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
           <div
             style={{
               position: 'absolute',
-              left: `calc(${localCursor.x}% + ${cursorAdjustments[currentUsername]?.xAdjust || defaultCursor.xAdjust})`,
-              top: `${localCursor.y + parseInt(cursorAdjustments[currentUsername]?.yAdjust || defaultCursor.yAdjust)}px`,
+              left: `calc(${localCursor.x}% + ${currentSkinData.xAdjust || defaultCursor.xAdjust})`,
+              top: `${localCursor.y + parseInt(currentSkinData.yAdjust || defaultCursor.yAdjust)}px`,
               width: '20px',
               height: '20px',
-              backgroundImage: `url(${cursorsImages[currentUsername]?.cursorImage})`,
+              backgroundImage: `url(${currentSkinData.image || defaultCursor.cursorImage})`,
               backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               transform: 'translate(-50%, -50%)',
@@ -276,7 +286,7 @@ function CursorOverlay({ currentUsername, userEffect, userAbility }) {
               whiteSpace: 'nowrap',
             }}
           >
-            {username}
+              {username}
           </div>
         </div>
       ))}

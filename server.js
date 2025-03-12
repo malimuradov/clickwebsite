@@ -83,14 +83,16 @@ function isUsernameTaken(username) {
 // clean up inactive users
 function cleanupInactiveUsers() {
   const now = Date.now();
-  for (const [socketId, user] of onlineUsers.entries()) {
-    if (now - user.lastActivity > 30000) { // 10 seconds of inactivity
-      onlineUsers.delete(socketId);
+  for (const [userId, user] of onlineUsers.entries()) {
+    if (!user.lastActivity || now - user.lastActivity > 30000) { // 30 seconds of inactivity
+      console.log(`Removing inactive user: ${user.username}`);
+      onlineUsers.delete(userId);
       delete cursors[user.username];
     }
   }
   updateAllUsers();
 }
+
 
 function addRecentMessage(message) {
   recentMessages.push(message);
@@ -177,7 +179,14 @@ io.on('connection', (socket) => {
     socket.userId = userId;
     socket.username = username;
     // Update the onlineUsers map
-    onlineUsers.set(userId, { id: userId, username, cursorSkin: 'default', isTemporary });
+    // In the 'authenticate' event handler:
+    onlineUsers.set(userId, { 
+      id: userId, 
+      username, 
+      cursorSkin: 'default', 
+      isTemporary,
+      lastActivity: Date.now() 
+    });
 
     // Send the authentication result back to the client
     socket.emit('authenticationResult', { userId, username, isTemporary, userData });
@@ -197,14 +206,24 @@ io.on('connection', (socket) => {
       userId = crypto.randomBytes(16).toString('hex');
       socket.userId = userId;
       socket.username = username;
-      onlineUsers.set(userId, { username, cursorSkin: equippedCursor ? equippedCursor : 'default', isTemporary: true });
+      onlineUsers.set(userId, { 
+        username, 
+        cursorSkin: equippedCursor ? equippedCursor : 'default', 
+        isTemporary: true,
+        lastActivity: Date.now() 
+      });
       socket.emit('tempAccResult');
     } else {
       userId = crypto.randomBytes(16).toString('hex');
       username = generateUniqueUsername();
       socket.userId = userId;
       socket.username = username;
-      onlineUsers.set(userId, { username, cursorSkin: 'default', isTemporary: true });
+      onlineUsers.set(userId, { 
+        username, 
+        cursorSkin: 'default', 
+        isTemporary: true,
+        lastActivity: Date.now() 
+      });
       socket.emit('tempAccResult', username);
     }
     socket.emit('updateRecentMessages', recentMessages);
@@ -214,6 +233,7 @@ io.on('connection', (socket) => {
       { cursorSkin: user.cursorSkin }
     ])));
   })
+
 
 
   socket.on('setUsername', (newUsername) => {
@@ -235,9 +255,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('cursorMove', ({ x, y, username }) => {
+    // Update the user's last activity time
+    if (socket.userId && onlineUsers.has(socket.userId)) {
+      const user = onlineUsers.get(socket.userId);
+      user.lastActivity = Date.now();
+      onlineUsers.set(socket.userId, user);
+    }
     cursors[username] = { x, y };
     io.emit('updateCursors', cursors);
   });
+
 
   socket.on('inviteToTeam', (inviteeId) => {
     io.to(inviteeId).emit('teamInvite', socket.userId);
@@ -450,7 +477,8 @@ async function loadUserData(userId) {
 loadServerData();
 setInterval(updateGlobalCPS, 100);
 setInterval(updateAllUsers, 5000);
-setInterval(cleanupInactiveUsers, 5000);
+// Set up interval to clean up inactive users
+setInterval(cleanupInactiveUsers, 10000); // Run every 10 seconds
 setInterval(syncTotalClicksWithDB, 30000);
 setInterval(syncUserClicksWithDB, 10000);
 setInterval(saveServerData, 60 * 60 * 1000);

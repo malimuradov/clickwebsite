@@ -1,13 +1,14 @@
-import React from 'react';
-import Shop from './Shop';
-import Gambling from './Gambling';
+import React, { useState } from 'react';
 import CursorOverlay from './CursorOverlay';
 import OnlineUsers from './OnlineUsers';
 import TeamInvites from './TeamInvites';
 import TeamInfo from './TeamInfo';
 import GlobalChat from './GlobalChat'; 
+import ShopPopup from './ShopPopup';
 
-function UnlockedContent({ 
+function UnlockedContent({
+  isOpen,
+  onClose,
   totalClicks, 
   onPurchase, 
   onUpgrade, 
@@ -15,7 +16,6 @@ function UnlockedContent({
   flatAutoClicker,
   percentAutoClicker,
   onUnlockGambling,
-  gamblingUnlocked,
   onGamble,
   cursors,
   username,
@@ -29,25 +29,25 @@ function UnlockedContent({
   onSendMessage,
   onUnlockChat,
   onCursorUpgrade,
-  unlockedCursors,
-  equippedCursor,
+  unlockedCursorSkins,
+  unlockedCursorAbilities,
+  unlockedCursorEffects,
+  equippedCursorSkin,
+  equippedCursorEffect,
+  equippedCursorAbility,
   onUsernameChange,
   teamBonus,
   onCollectTeamBonus,
   currentUserId,
-  userSkin,
-  userEffect,
-  userAbility
 }) {
-
   return (
     <div>
-      {/* <CursorOverlay cursors={cursors} username={username}/> */}
       <CursorOverlay 
         cursors={cursors} 
-        currentUsername={username} 
-        userEffect={userEffect}
-        userAbility={userAbility}
+        currentUsername={username}
+        equippedCursorSkin={equippedCursorSkin}
+        equippedCursorEffect={equippedCursorEffect}
+        equippedCursorAbility={equippedCursorAbility}
       />
 
       <OnlineUsers 
@@ -60,8 +60,10 @@ function UnlockedContent({
       <TeamInvites invites={teamInvites} onAccept={onAcceptInvite} />
 
       {team && <TeamInfo team={team} onLeave={onLeaveTeam} teamBonus={teamBonus} onCollectTeamBonus={onCollectTeamBonus} />}
-      
-      <Shop 
+
+      <ShopPopup 
+        isOpen={isOpen}
+        onClose={onClose}
         totalClicks={totalClicks} 
         onPurchase={onPurchase} 
         onUpgrade={onUpgrade}
@@ -71,18 +73,13 @@ function UnlockedContent({
         onUnlockGambling={onUnlockGambling}
         onUnlockChat={onUnlockChat}
         chatUnlocked={chatUnlocked}
-        gamblingUnlocked={gamblingUnlocked}
-        unlockedCursors={unlockedCursors}
-        equippedCursor={equippedCursor}
-        userSkin={userSkin}
+        unlockedCursorSkins={unlockedCursorSkins}
+        unlockedCursorAbilities={unlockedCursorAbilities}
+        unlockedCursorEffects={unlockedCursorEffects}
+        equippedCursorSkin={equippedCursorSkin}
+        equippedCursorEffect={equippedCursorEffect}
+        equippedCursorAbility={equippedCursorAbility}
       />
-
-      {gamblingUnlocked && (
-        <Gambling 
-          totalClicks={totalClicks}
-          onGamble={onGamble}
-        />
-      )}
 
       {chatUnlocked && (
         <GlobalChat
@@ -95,7 +92,6 @@ function UnlockedContent({
     </div>
   );
 }
-
 
 export default UnlockedContent;
 
