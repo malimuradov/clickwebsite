@@ -140,8 +140,8 @@ io.on('connection', (socket) => {
     let isTemporary = true;
     let userData = null;
     if (token) {
-      // Verify the token
       try {
+        // Verify the token
         const decoded = jwt.verify(token, JWT_SECRET);
         userId = decoded.id;
         username = decoded.username;
@@ -149,14 +149,23 @@ io.on('connection', (socket) => {
 
         // Check if the user exists in the database
         if (!isDevelopment) {
-          const user = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
-          if (user.rows.length === 0) {
-            // User not found in database, treat as temporary
+          try {
+            // Convert string ID to integer if needed
+            const dbUserId = isNaN(parseInt(userId)) ? userId : parseInt(userId);
+            const user = await db.query('SELECT * FROM users WHERE id = $1', [dbUserId]);
+            if (user.rows.length === 0) {
+              // User not found in database, treat as temporary
+              isTemporary = true;
+              userId = null;
+              username = null;
+            } else {
+              userData = user.rows[0];
+            }
+          } catch (dbError) {
+            console.error('Database query error:', dbError);
             isTemporary = true;
             userId = null;
             username = null;
-          } else {
-            userData = user.rows[0];
           }
         }
       } catch (error) {
@@ -415,6 +424,7 @@ socket.on('createPermanentAccount', async (data) => {
     io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   }
 });
+
 });
 
 // Data persistence functions

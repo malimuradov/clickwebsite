@@ -1,5 +1,7 @@
 require('dotenv').config();
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -42,33 +44,20 @@ const initDb = async () => {
   });
 
   try {
-    // Create tables
-    await dbClient.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
+    // Read the SQL file
+    const sqlFilePath = path.join(__dirname, 'database.sql');
+    let sqlScript = fs.readFileSync(sqlFilePath, 'utf8');
 
-      CREATE TABLE IF NOT EXISTS progress (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        total_clicks BIGINT DEFAULT 0,
-        best_cps INTEGER DEFAULT 0,
-        flat_click_bonus INTEGER DEFAULT 0,
-        percentage_click_bonus DECIMAL(5,2) DEFAULT 1.00,
-        flat_auto_clicker INTEGER DEFAULT 0,
-        percent_auto_clicker INTEGER DEFAULT 0,
-        drawing_unlocked BOOLEAN DEFAULT FALSE,
-        gambling_unlocked BOOLEAN DEFAULT FALSE,
-        last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('Tables created successfully');
+    // Remove the first line that contains \c webclicker_db since we're already connected
+    sqlScript = sqlScript.replace(/^\s*\\c\s+webclicker_db\s*;?\s*$/m, '');
+
+    // Execute the SQL script
+    await dbClient.query(sqlScript);
+
+    console.log('Database schema initialized successfully from database.sql');
   } catch (err) {
-    console.error('Error creating tables:', err);
+    console.error('Error initializing database schema:', err);
+    console.error(err.stack);
   } finally {
     await dbClient.end();
   }
