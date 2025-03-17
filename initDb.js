@@ -44,6 +44,13 @@ const initDb = async () => {
   });
 
   try {
+    // First, drop existing tables if they exist (in reverse order of dependencies)
+    await dbClient.query(`
+      DROP TABLE IF EXISTS progress;
+      DROP TABLE IF EXISTS temp_users;
+      DROP TABLE IF EXISTS users;
+    `);
+    console.log('Dropped existing tables');
     // Read the SQL file
     const sqlFilePath = path.join(__dirname, 'database.sql');
     let sqlScript = fs.readFileSync(sqlFilePath, 'utf8');
@@ -51,10 +58,18 @@ const initDb = async () => {
     // Remove the first line that contains \c webclicker_db since we're already connected
     sqlScript = sqlScript.replace(/^\s*\\c\s+webclicker_db\s*;?\s*$/m, '');
 
-    // Execute the SQL script
-    await dbClient.query(sqlScript);
+    // Split the script into individual statements
+    const statements = sqlScript
+      .split(';')
+      .map(statement => statement.trim())
+      .filter(statement => statement.length > 0);
 
+    // Execute each statement separately
+    for (const statement of statements) {
+      await dbClient.query(statement);
+    }
     console.log('Database schema initialized successfully from database.sql');
+
   } catch (err) {
     console.error('Error initializing database schema:', err);
     console.error(err.stack);
