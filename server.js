@@ -14,6 +14,7 @@ const db = isDevelopment ? null : require('./db');
 const PORT = process.env.PORT || 4000;
 const MAX_RECENT_MESSAGES = 50;
 const JWT_SECRET = process.env.JWT_SECRET;
+const TEMP_JWT_SECRET = process.env.TEMP_JWT_SECRET || JWT_SECRET; // Use a separate secret for temp users or fall back to main secret
 
 // Server setup
 const app = express();
@@ -60,7 +61,7 @@ function updateAllUsers() {
     ])));
     lastSkinUpdate = now;
   }
-  
+
   const oneMinuteAgo = Date.now() - 60000;
   recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
 }
@@ -139,56 +140,70 @@ io.on('connection', (socket) => {
     let username = null;
     let isTemporary = true;
     let userData = null;
+
     if (token) {
       try {
-        // Verify the token
+        // First try to verify as a regular token
         const decoded = jwt.verify(token, JWT_SECRET);
         userId = decoded.id;
         username = decoded.username;
         isTemporary = false;
 
         // Check if the user exists in the database
-        if (!isDevelopment) {
+        if (!isDevelopment && db) {
           try {
             // Convert string ID to integer if needed
             const dbUserId = isNaN(parseInt(userId)) ? userId : parseInt(userId);
             const user = await db.query('SELECT * FROM users WHERE id = $1', [dbUserId]);
             if (user.rows.length === 0) {
-              // User not found in database, treat as temporary
-              isTemporary = true;
-              userId = null;
-              username = null;
+              // User not found in database, try as temporary token
+              throw new Error('User not found in database');
             } else {
               userData = user.rows[0];
             }
           } catch (dbError) {
             console.error('Database query error:', dbError);
-            isTemporary = true;
-            userId = null;
-            username = null;
+            // Try as temporary token
+            throw new Error('Database error');
           }
         }
       } catch (error) {
-        console.error('Token verification failed:', error);
-        // Token is invalid or expired, treat as temporary
-        userId = null;
-        username = null;
+        console.error('Regular token verification failed:', error);
+
+        // Try to verify as a temporary token
+        try {
+          const decoded = jwt.verify(token, TEMP_JWT_SECRET);
+          if (decoded.isTemporary) {
+            userId = decoded.id;
+            username = decoded.username;
+            isTemporary = true;
+
+            // Emit the temporary authentication event
+            socket.emit('authenticateTemp', token);
+            return; // Exit early as we're handling this as a temp token
+          } else {
+            // Not a valid temporary token either
+            userId = null;
+            username = null;
+          }
+        } catch (tempError) {
+          console.error('Temporary token verification failed:', tempError);
+          userId = null;
+          username = null;
+        }
       }
-    } else {
-      socket.emit('authenticationFailure');
     }
 
-    if (isTemporary) {
-      // Generate new temporary user
-      userId = crypto.randomBytes(16).toString('hex');
-      username = generateUniqueUsername();
+    if (!userId || !username) {
+      socket.emit('authenticationFailure');
+      return;
     }
 
     // Store the userId in the socket object for future reference
     socket.userId = userId;
     socket.username = username;
+    socket.isTemporary = isTemporary;
     // Update the onlineUsers map
-    // In the 'authenticate' event handler:
     onlineUsers.set(userId, { 
       id: userId, 
       username, 
@@ -207,8 +222,8 @@ io.on('connection', (socket) => {
       user.username,
       { cursorSkin: user.cursorSkin }
     ])));
-    //io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
   });
+
 
   socket.on('setTempAccount', (username, equippedCursor) => {
     if (username) {
@@ -253,11 +268,11 @@ io.on('connection', (socket) => {
       if (user) {
         user.username = newUsername;
         onlineUsers.set(socket.userId, user);
-        
+
         // Update the token with the new username
         const newToken = jwt.sign({ id: socket.userId, username: newUsername }, JWT_SECRET, { expiresIn: '30d' });
         socket.emit('authentication', { token: newToken, userId: socket.userId, username: newUsername });
-        
+
         io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
       }
     }
@@ -377,56 +392,316 @@ io.on('connection', (socket) => {
     }
   });
 
-socket.on('createPermanentAccount', async (data) => {
-  const { username, email, password } = data;
-  const userId = socket.userId;
+  socket.on('createPermanentAccount', async (data) => {
+    const { username, email, password } = data;
+    const userId = socket.userId;
 
-  if (!isDevelopment) {
-    try {
-      // Check if username or email already exists
-      const existingUser = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
-      if (existingUser.rows.length > 0) {
-        socket.emit('accountCreationError', 'Username or email already exists');
-        return;
+    if (!isDevelopment) {
+      try {
+        // Check if username or email already exists
+        const existingUser = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+        if (existingUser.rows.length > 0) {
+          socket.emit('accountCreationError', 'Username or email already exists');
+          return;
+        }
+
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert the new user into the database
+        const newUser = await db.query(
+          'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING *',
+          [userId, username, email, hashedPassword]
+        );
+
+        // Update the user's data in the onlineUsers map
+        const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
+        onlineUsers.set(userId, updatedUser);
+
+        // Generate a new token for the permanent account
+        const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+
+        // Send the new authentication data back to the client
+        socket.emit('accountCreated', { token, userId, username, userData: newUser.rows[0] });
+
+        // Update all clients with the new user list
+        io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+      } catch (error) {
+        console.error('Error creating permanent account:', error);
+        socket.emit('accountCreationError', 'An error occurred while creating the account');
       }
-
-      // Hash the password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      // Insert the new user into the database
-      const newUser = await db.query(
-        'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING *',
-        [userId, username, email, hashedPassword]
-      );
-
-      // Update the user's data in the onlineUsers map
+    } else {
+      // In development mode, simulate account creation
       const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
       onlineUsers.set(userId, updatedUser);
-
-      // Generate a new token for the permanent account
       const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+      socket.emit('accountCreated', { token, userId, username, userData: { id: userId, username, email } });
+      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+    }
+  });
 
-      // Send the new authentication data back to the client
-      socket.emit('accountCreated', { token, userId, username, userData: newUser.rows[0] });
+  socket.on('createTempUser', async () => {
+    try {
+      // Generate a unique ID and username for the temporary user
+      const tempUserId = crypto.randomBytes(16).toString('hex');
+      const tempUsername = generateUniqueUsername();
+
+      // Create a JWT token that expires in 2 weeks (14 days)
+      const tempToken = jwt.sign(
+        { 
+          id: tempUserId, 
+          username: tempUsername,
+          isTemporary: true 
+        },
+        TEMP_JWT_SECRET,
+        { expiresIn: '14d' }
+      );
+
+      // Store user in the database if not in development mode
+      if (!isDevelopment && db) {
+        try {
+          // Insert into temp_users table
+          await db.query(
+            'INSERT INTO temp_users (id, username) VALUES ($1, $2)',
+            [tempUserId, tempUsername]
+          );
+
+          // Create initial progress record
+          await db.query(
+            'INSERT INTO progress (temp_user_id, total_clicks) VALUES ($1, 0)',
+            [tempUserId]
+          );
+        } catch (dbError) {
+          console.error('Error storing temporary user in database:', dbError);
+          // Continue anyway, as we can still create a temporary user in memory
+        }
+      }
+
+      // Store the user info in the socket and online users map
+      socket.userId = tempUserId;
+      socket.username = tempUsername;
+      socket.isTemporary = true;
+
+      onlineUsers.set(tempUserId, { 
+        id: tempUserId, 
+        username: tempUsername, 
+        cursorSkin: 'default', 
+        isTemporary: true,
+        lastActivity: Date.now() 
+      });
+
+      // Send the token and user info back to the client
+      socket.emit('tempUserCreated', {
+        tempUserId,
+        tempUsername,
+        tempToken
+      });
+
+      // Send initial data to the new user
+      socket.emit('updateRecentMessages', recentMessages);
+      socket.emit('updateCount', clickCount);
+      socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+        user.username,
+        { cursorSkin: user.cursorSkin }
+      ])));
 
       // Update all clients with the new user list
       io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+
+      console.log(`Created temporary user: ${tempUsername} (${tempUserId})`);
     } catch (error) {
-      console.error('Error creating permanent account:', error);
-      socket.emit('accountCreationError', 'An error occurred while creating the account');
+      console.error('Error creating temporary user:', error);
+      socket.emit('error', 'Failed to create temporary user');
     }
-  } else {
-    // In development mode, simulate account creation
-    const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
-    onlineUsers.set(userId, updatedUser);
-    const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
-    socket.emit('accountCreated', { token, userId, username, userData: { id: userId, username, email } });
+  });
+
+  socket.on('authenticateTemp', async (tempToken) => {
+    try {
+      // Verify the token
+      const decoded = jwt.verify(tempToken, TEMP_JWT_SECRET);
+
+      if (!decoded.isTemporary) {
+        throw new Error('Not a temporary user token');
+      }
+
+      const tempUserId = decoded.id;
+      const tempUsername = decoded.username;
+
+      // Check if the user exists in the database (if not in development mode)
+      let gameData = {};
+      if (!isDevelopment && db) {
+        try {
+          // Check if temp user exists
+          const userResult = await db.query(
+            'SELECT * FROM temp_users WHERE id = $1',
+            [tempUserId]
+          );
+
+          if (userResult.rows.length === 0) {
+            // User not found in database, create a new one
+            throw new Error('Temporary user not found in database');
+          }
+
+          // Update last activity timestamp
+          await db.query(
+            'UPDATE temp_users SET last_activity = CURRENT_TIMESTAMP WHERE id = $1',
+            [tempUserId]
+          );
+
+          // Get user progress
+          const progressResult = await db.query(
+            'SELECT * FROM progress WHERE temp_user_id = $1',
+            [tempUserId]
+          );
+
+          if (progressResult.rows.length > 0) {
+            const progress = progressResult.rows[0];
+            gameData = {
+              totalClicks: progress.total_clicks || 0,
+              naturalClicks: progress.natural_clicks || 0,
+              bestCPS: progress.best_cps || 0,
+              flatClickBonus: progress.flat_click_bonus || 0,
+              percentageClickBonus: progress.percentage_click_bonus || 1,
+              flatAutoClicker: progress.flat_auto_clicker || 0,
+              percentAutoClicker: progress.percent_auto_clicker || 0,
+              unlockables: progress.unlockables || [0, 0, 0, 0, 0],
+              equippedCursor: 'default'
+            };
+          }
+        } catch (dbError) {
+          console.error('Database error during temp authentication:', dbError);
+          // Continue with memory-only user
+        }
+      }
+
+      // Store the user info in the socket and online users map
+      socket.userId = tempUserId;
+      socket.username = tempUsername;
+      socket.isTemporary = true;
+
+      onlineUsers.set(tempUserId, { 
+        id: tempUserId, 
+        username: tempUsername, 
+        cursorSkin: gameData.equippedCursor || 'default', 
+        isTemporary: true,
+        lastActivity: Date.now() 
+      });
+
+      // Send success response with user info and game data
+      socket.emit('tempAuthSuccess', {
+        tempUserId,
+        tempUsername,
+        gameData
+      });
+
+      // Send initial data to the authenticated user
+      socket.emit('updateRecentMessages', recentMessages);
+      socket.emit('updateCount', clickCount);
+      socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
+        user.username,
+        { cursorSkin: user.cursorSkin }
+      ])));
+
+      // Update all clients with the new user list
+      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+
+      console.log(`Authenticated temporary user: ${tempUsername} (${tempUserId})`);
+    } catch (error) {
+      console.error('Error authenticating temporary user:', error);
+      socket.emit('tempAuthFailure');
+      // Create a new temporary user as fallback
+      socket.emit('createTempUser');
+    }
+  });
+
+socket.on('upgradeTemp', async ({ tempUserId, email, password, username }) => {
+  try {
+    // Verify this is the same user who owns the temp account
+    if (!socket.isTemporary || socket.userId !== tempUserId) {
+      throw new Error('Unauthorized upgrade attempt');
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    let newUserId;
+
+    if (!isDevelopment && db) {
+      // Start a transaction
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Create the permanent user
+        const userResult = await client.query(
+          'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
+          [username || socket.username, email, hashedPassword]
+        );
+
+        newUserId = userResult.rows[0].id;
+
+        // Transfer progress from temp user to permanent user
+        await client.query(
+          `UPDATE progress 
+           SET user_id = $1, temp_user_id = NULL 
+           WHERE temp_user_id = $2`,
+          [newUserId, tempUserId]
+        );
+
+        // Delete the temporary user
+        await client.query('DELETE FROM temp_users WHERE id = $1', [tempUserId]);
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } else {
+      // In development mode, just generate a new ID
+      newUserId = crypto.randomBytes(16).toString('hex');
+    }
+
+    // Generate a permanent token
+    const token = jwt.sign(
+      { id: newUserId, username: username || socket.username },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    // Update socket data
+    socket.userId = newUserId;
+    socket.username = username || socket.username;
+    socket.isTemporary = false;
+
+    // Update online users map
+    onlineUsers.set(newUserId, { 
+      id: newUserId, 
+      username: socket.username, 
+      cursorSkin: onlineUsers.get(tempUserId)?.cursorSkin || 'default', 
+      isTemporary: false,
+      lastActivity: Date.now() 
+    });
+    onlineUsers.delete(tempUserId);
+
+    // Send the token to the client
+    socket.emit('upgradeSuccess', {
+      token,
+      userId: newUserId,
+      username: socket.username
+    });
+
+    // Update online users list
     io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
+
+    console.log(`Upgraded temporary user ${tempUserId} to permanent user ${newUserId}`);
+  } catch (error) {
+    console.error('Error upgrading temporary account:', error);
+    socket.emit('upgradeFailure', error.message);
   }
 });
-
 });
-
 // Data persistence functions
 function saveServerData() {
   const data = {
@@ -599,3 +874,4 @@ app.post('/api/register', async (req, res) => {
 // Start the server
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+

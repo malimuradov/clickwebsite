@@ -32,18 +32,14 @@ export function SocketProvider({ children }) {
       } else {
         console.log('No token found, creating a new temporary account');
         // Check for cached temporary account data
-        const cachedData = localStorage.getItem('tempAccountData');
-        if (cachedData) {
-          console.log('Using cached temporary account data');
-          const { username, equippedCursor } = JSON.parse(cachedData);
-          setUsername(username);
-          setEquippedCursor(equippedCursor);
-          setIsTemporary(true);
-          newSocket.emit('setTempAccount', { username, equippedCursor });
+        const tempToken = localStorage.getItem('tempToken');
+        if (tempToken) {
+          console.log('Using existing temporary token');
+          newSocket.emit('authenticateTemp', tempToken);
         } else {
           console.log('Creating a new temporary account');
           setIsTemporary(true);
-          newSocket.emit('setTempAccount');
+          newSocket.emit('createTempUser');
         }
       }
     });
@@ -54,29 +50,69 @@ export function SocketProvider({ children }) {
       setIsLoggedIn(true);
       setIsTemporary(false);
       // Clear temporary account data if it exists
+      localStorage.removeItem('tempToken');
       localStorage.removeItem('tempAccountData');
+    });
+
+    newSocket.on('tempUserCreated', ({ tempUserId, tempUsername, tempToken }) => {
+      console.log('Temporary user created:', tempUsername);
+      setUserId(tempUserId);
+      setUsername(tempUsername);
+      setIsTemporary(true);
+      
+      // Store the temporary token with 2 weeks expiration
+      localStorage.setItem('tempToken', tempToken);
+      
+      // Store initial account data
+      const initialData = {
+        username: tempUsername,
+        equippedCursor: 'default'
+      };
+      localStorage.setItem('tempAccountData', JSON.stringify(initialData));
+    });
+
+    newSocket.on('tempAuthSuccess', ({ tempUserId, tempUsername, gameData }) => {
+      console.log('Temporary authentication successful:', tempUsername);
+      setUserId(tempUserId);
+      setUsername(tempUsername);
+      setIsTemporary(true);
+      
+      // If we have game data from the server, update the local state
+      if (gameData) {
+        if (gameData.equippedCursor) {
+          setEquippedCursor(gameData.equippedCursor);
+        }
+        
+        // Update tempAccountData with the latest data
+        const updatedData = {
+          username: tempUsername,
+          equippedCursor: gameData.equippedCursor || 'default',
+          // Add any other game state you want to preserve
+        };
+        localStorage.setItem('tempAccountData', JSON.stringify(updatedData));
+      }
+    });
+
+    newSocket.on('tempAuthFailure', () => {
+      console.log('Temporary token expired or invalid, creating new temp user');
+      // Remove the invalid token
+      localStorage.removeItem('tempToken');
+      localStorage.removeItem('tempAccountData');
+      
+      // Create a new temporary user
+      newSocket.emit('createTempUser');
     });
 
     newSocket.on('authenticationFailure', () => {
       // Authentication failed, fallback to temporary account
-      const cachedData = localStorage.getItem('tempAccountData');
-      if (cachedData) {
-        const { username, equippedCursor } = JSON.parse(cachedData);
-        setUsername(username);
-        setEquippedCursor(equippedCursor);
-        setIsTemporary(true);
-        newSocket.emit('setTempAccount', { username, equippedCursor });
+      const tempToken = localStorage.getItem('tempToken');
+      if (tempToken) {
+        newSocket.emit('authenticateTemp', tempToken);
       } else {
-        newSocket.emit('setTempAccount');
+        newSocket.emit('createTempUser');
       }
     });
 
-    newSocket.on('tempAccResult', (username) => {
-      if(username) {
-        setUsername(username);
-        setIsTemporary(true);
-      }
-    })
     newSocket.on('connect_error', (err) => {
       console.error('Failed to connect to the server:', err);
       setIsConnected(false);
@@ -93,25 +129,39 @@ export function SocketProvider({ children }) {
 
   const login = (credentials) => {
     // Implement login logic here
-    // This should emit a 'login' event to the server with the credentials
     socket.emit('login', credentials);
   };
 
   const register = (userData) => {
     // Implement registration logic here
-    // This should emit a 'register' event to the server with the user data
     socket.emit('register', userData);
   };
 
   const logout = () => {
     // Implement logout logic here
-    localStorage.removeItem('userToken');
+    localStorage.removeItem('token');
+    setIsLoggedIn(false);
     setIsTemporary(true);
     setUserId(null);
     setUsername('');
-    // Optionally, reconnect to get a new temporary account
-    socket.disconnect().connect();
+    
+    // Check if we have a temporary token to fall back to
+    const tempToken = localStorage.getItem('tempToken');
+    if (tempToken) {
+      socket.emit('authenticateTemp', tempToken);
+    } else {
+      // Create a new temporary user
+      socket.emit('createTempUser');
+    }
   };
+
+  const upgradeToPermAccount = (userData) => {
+    // Convert temporary account to permanent
+    if (isTemporary && userId) {
+      socket.emit('upgradeTemp', { tempUserId: userId, ...userData });
+    }
+  };
+
   if (!isConnected) {
     return <div>Connecting to server...</div>;
   }
@@ -126,9 +176,11 @@ export function SocketProvider({ children }) {
       cursors, 
       setUsername,
       isTemporary,
+      isLoggedIn,
       login,
       register,
-      logout
+      logout,
+      upgradeToPermAccount
     }}>
       {children}
     </SocketContext.Provider>
