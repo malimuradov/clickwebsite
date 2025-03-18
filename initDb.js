@@ -55,9 +55,7 @@ const initDb = async () => {
     const sqlFilePath = path.join(__dirname, 'database.sql');
     let sqlScript = fs.readFileSync(sqlFilePath, 'utf8');
 
-    // Remove the first line that contains \c webclicker_db since we're already connected
-    sqlScript = sqlScript.replace(/^\s*\\c\s+webclicker_db\s*;?\s*$/m, '');
-
+   
     // Split the script into individual statements
     const statements = sqlScript
       .split(';')

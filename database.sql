@@ -1,9 +1,6 @@
--- Connect to the correct database
-\c webclicker_db
-
 -- Create tables
 CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
+    id VARCHAR(255) PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -11,7 +8,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE temp_users (
-    id SERIAL PRIMARY KEY,
+    id VARCHAR(255) PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -19,8 +16,8 @@ CREATE TABLE temp_users (
 
 CREATE TABLE progress (
     id SERIAL PRIMARY KEY,
-    temp_user_id INTEGER REFERENCES temp_users(id),
-    user_id INTEGER REFERENCES users(id),
+    temp_user_id VARCHAR(255) REFERENCES temp_users(id),
+    user_id VARCHAR(255) REFERENCES users(id),
     natural_clicks INTEGER DEFAULT 0,
     total_clicks BIGINT DEFAULT 0,
     best_cps INTEGER DEFAULT 0,
