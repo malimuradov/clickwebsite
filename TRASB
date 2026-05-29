@@ -1,0 +1,102 @@
+socket.on('authenticate', async (token) => {
+    let userId = jwt.decode(token)?.id; // Decode without verification to get userId for rate limiting
+    let username = null;
+    let isTemporary = true;
+    let userData = null;
+
+    // if (await isRateLimited(userId)) {
+    //   socket.emit('authenticationFailure', 'Too many requests. Please try again later.');
+    //   return;
+    // }
+
+    const authResult = await authenticateUser(token);
+
+    if (authResult.isAuthenticated) {
+      socket.userId = authResult.userId;
+      username = authResult.username;
+      isTemporary = authResult.isTemporary;
+      userData = authResult.userData;
+    } else {
+      socket.emit('authenticationFailure');
+      
+    }
+    // let userId = null;
+    
+
+    if (token) {
+      try {
+        // First try to verify as a regular token
+        const decoded = jwt.verify(token, JWT_SECRET);
+        let userId = decoded.id;
+        username = decoded.username;
+        isTemporary = false;
+
+        // Check if the user exists in the database
+        if (!isDevelopment && db) {
+          try {
+            // Convert string ID to integer if needed
+            const dbUserId = isNaN(parseInt(userId)) ? userId : parseInt(userId);
+            const user = await db.query('SELECT * FROM users WHERE id = $1', [dbUserId]);
+            if (user.rows.length === 0) {
+              // User not found in database, try as temporary token
+              throw new Error('User not found in database');
+            } else {
+              userData = user.rows[0];
+            }
+          } catch (dbError) {
+            console.error('Database query error:', dbError);
+            // Try as temporary token
+            throw new Error('Database error');
+          }
+        }
+      } catch (error) {
+        console.error('Regular token verification failed:', error);
+
+        // Try to verify as a temporary token
+        try {
+          const decoded = jwt.verify(token, TEMP_JWT_SECRET);
+          if (decoded.isTemporary) {
+            userId = decoded.id;
+            username = decoded.username;
+            isTemporary = true;
+
+            // Emit the temporary authentication event
+            socket.emit('authenticateTemp', token);
+            return; // Exit early as we're handling this as a temp token
+          } else {
+            // Not a valid temporary token either
+            userId = null;
+            username = null;
+          }
+        } catch (tempError) {
+          console.error('Temporary token verification failed:', tempError);
+          userId = null;
+          username = null;
+        }
+      }
+    }
+
+    if (!userId || !username) {
+      socket.emit('authenticationFailure');
+      return;
+    }
+
+    // Store the userId in the socket object for future reference
+    socket.userId = userId;
+    socket.username = username;
+    socket.isTemporary = isTemporary;
+    // Update the onlineUsers map
+    onlineUsers.set(userId, { 
+      id: userId, 
+      username, 
+      cursorSkin: 'default', 
+      isTemporary,
+      lastActivity: Date.now() 
+    });
+
+    // Send the authentication result back to the client
+    socket.emit('authenticationResult', { userId, username, isTemporary, userData });
+
+
+
+    // authentication part on connecting

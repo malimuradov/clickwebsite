@@ -1,12 +1,15 @@
 require('dotenv').config();
 const http = require('http');
 const express = require('express');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const redis = require('redis');  
+const { promisify } = require('util');  
+
 
 // Configuration
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -15,854 +18,451 @@ const PORT = process.env.PORT || 4000;
 const MAX_RECENT_MESSAGES = 50;
 const JWT_SECRET = process.env.JWT_SECRET;
 const TEMP_JWT_SECRET = process.env.TEMP_JWT_SECRET || JWT_SECRET; // Use a separate secret for temp users or fall back to main secret
-
-// Server setup
-const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
-  cors: {
-    origin: isDevelopment ? "http://localhost:3000" : "http://52.59.228.62:8080",
-    methods: ["GET", "POST"]
-  }
-});
-
-// Global variables
-let clickCount = 0;
-let clicks = [];
-let onlineUsers = new Map();
-let teams = new Map();
-let userClicks = new Map();
-let recentMessages = [];
-let cursors = {};
-let lastSkinUpdate = 0;
+const CACHE_EXPIRATION = 3600; // Cache expiration for redis
+const MAX_REQUESTS_PER_MINUTE = 60; // Rate limit for Redis
 const SKIN_UPDATE_INTERVAL = 1000; // 10 seconds
 
-// Middleware
+// ─── Handlers ─────────────────────────────────────────────────────────────────
+const { authMiddleware }       = require('./middleware/auth');
+const { registerAuthHandlers } = require('./handlers/authHandler');
+const { registerChatHandlers } = require('./handlers/chatHandler');
+const { registerGameHandlers } = require('./handlers/gameHandler');
+const { registerTeamHandlers } = require('./handlers/teamHandler');
+const { registerAccountHandlers }  = require('./handlers/accountHandler');
+const { registerDisconnectHandler } = require('./handlers/disconnectHandler');
+const { onlineUsers }          = require('./services/userService');
+
+// Server express setup
+const app = express();
+const server = http.createServer(app);
+const io     = new Server(server, {
+  cors: { origin: process.env.CLIENT_ORIGIN ?? '*', methods: ['GET', 'POST'] },
+  // Recommended for prod: pingTimeout, pingInterval, maxHttpBufferSize
+  pingTimeout:       20_000,
+  pingInterval:      25_000,
+  maxHttpBufferSize: 1e6, // 1 MB max payload
+});
+
 app.use(express.json());
 
-// Helper functions
-function updateGlobalCPS() {
-    const now = Date.now();
-    clicks = clicks.filter(click => now - click < 1010);
-    const globalCPS = clicks.length;
-    io.emit('updateGlobalCPS', globalCPS);
-}
+// Redis client setup
+const redisClient = redis.createClient({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: process.env.REDIS_PORT || 6379,
+});
 
-function updateAllUsers() {
-  io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-  io.emit('updateRecentMessages', recentMessages);
-  io.emit('updateCursors', cursors);
-  // update user skins every SKIN_UPDATE_INTERVAL seconds
-  const now = Date.now();
-  if (now - lastSkinUpdate > SKIN_UPDATE_INTERVAL) {
-    io.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-      user.username,
-      { cursorSkin: user.cursorSkin }
-    ])));
-    lastSkinUpdate = now;
-  }
+// Add event listeners for connection status
+redisClient.on('error', (err) => {
+  console.error('Redis error:', err);
+});
 
-  const oneMinuteAgo = Date.now() - 60000;
-  recentMessages = recentMessages.filter(msg => msg.timestamp > oneMinuteAgo);
-}
+redisClient.on('connect', () => {
+  console.log('Connected to Redis server');
+});
 
-// Add this function to generate a unique username
-function generateUniqueUsername() {
-  let username;
-  do {
-    const randomString = crypto.randomBytes(4).toString('hex');
-    username = `User_${randomString}`;
-  } while (isUsernameTaken(username));
-  return username;
-}
-
-// Add this function to check if a username already exists
-function isUsernameTaken(username) {
-  return Array.from(onlineUsers.values()).some(user => user.username === username);
-}
-
-// clean up inactive users
-function cleanupInactiveUsers() {
-  const now = Date.now();
-  for (const [userId, user] of onlineUsers.entries()) {
-    if (!user.lastActivity || now - user.lastActivity > 30000) { // 30 seconds of inactivity
-      console.log(`Removing inactive user: ${user.username}`);
-      onlineUsers.delete(userId);
-      delete cursors[user.username];
-    }
-  }
-  updateAllUsers();
-}
+// Promisify Redis commands for Redis 3.0.x
+const getAsync = promisify(redisClient.get).bind(redisClient);
+const setexAsync = promisify(redisClient.setEx).bind(redisClient);
+const incrAsync = promisify(redisClient.incr).bind(redisClient);
+const expireAsync = promisify(redisClient.expire).bind(redisClient);
 
 
-function addRecentMessage(message) {
-  recentMessages.push(message);
-  if (recentMessages.length > MAX_RECENT_MESSAGES) {
-    recentMessages.shift();
-  }
-}
+// ─── Shared mutable state ─────────────────────────────────────────────────────
+// In production, move clickCount and recentMessages to Redis.
+// For now they live in process memory and are passed by reference.
+ 
+/** @type {Object[]} */
+const recentMessages = [];
+let clickCount       = 0;
+ 
+/** @type {Map<string, { members: string[] }>} */
+const teams = new Map();
+ 
+/** @param {Object} msg */
+const addRecentMessage = (msg) => {
+  recentMessages.push(msg);
+  if (recentMessages.length > 50) recentMessages.shift(); // cap at 50
+};
+ 
 
-async function syncTotalClicksWithDB() {
-  if (isDevelopment) {
-    console.log('Development mode: Skipping database sync');
-    return;
-  }
-  try {
-    const result = await db.query('SELECT SUM(total_clicks) as total_clicks FROM progress');
-    clickCount = parseInt(result.rows[0].total_clicks) || 0;
-    console.log('Total clicks synced with database:', clickCount);
-    io.emit('updateCount', clickCount);
-  } catch (error) {
-    console.error('Error syncing total clicks with database:', error);
-  }
-}
+/** Broadcasts updated user list to all connected sockets. */
+const updateAllUsers = () => {
+  io.emit('users:online', Array.from(onlineUsers.values()));
+};
+ 
+/**
+ * The single shared state object passed into every handler.
+ * Handlers read and mutate this — no global variables scattered around.
+ */
+const sharedState = {
+  recentMessages,
+  addRecentMessage,
+  get clickCount()        { return clickCount; },
+  set clickCount(v)       { clickCount = v; },
+  teams,
+  db,
+  isDevelopment,
+  updateAllUsers,
+};
 
-async function syncUserClicksWithDB(userId, clicks) {
-  if (isDevelopment) {
-    console.log('Development mode: Skipping user clicks sync');
-    return;
-  }
-  if (clicks > 0) {
-    try {
-      await db.query('UPDATE progress SET total_clicks = total_clicks + $1 WHERE user_id = $2', [clicks, userId]);
-    } catch (error) {
-      console.error(`Error syncing clicks for user ${userId}:`, error);
-    }
-  }
-}
 
-// Socket.io event handlers
+
+
+// ─── Global Socket.IO middleware ──────────────────────────────────────────────
+// Runs once per connection, before any event. Verifies token, attaches user.
+io.use(authMiddleware);
+
+// ─── Connection handler ───────────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  console.log('New client connected', socket.id);
-
-  socket.on('authenticate', async (token) => {
-    let userId = null;
-    let username = null;
-    let isTemporary = true;
-    let userData = null;
-
-    if (token) {
-      try {
-        // First try to verify as a regular token
-        const decoded = jwt.verify(token, JWT_SECRET);
-        userId = decoded.id;
-        username = decoded.username;
-        isTemporary = false;
-
-        // Check if the user exists in the database
-        if (!isDevelopment && db) {
-          try {
-            // Convert string ID to integer if needed
-            const dbUserId = isNaN(parseInt(userId)) ? userId : parseInt(userId);
-            const user = await db.query('SELECT * FROM users WHERE id = $1', [dbUserId]);
-            if (user.rows.length === 0) {
-              // User not found in database, try as temporary token
-              throw new Error('User not found in database');
-            } else {
-              userData = user.rows[0];
-            }
-          } catch (dbError) {
-            console.error('Database query error:', dbError);
-            // Try as temporary token
-            throw new Error('Database error');
-          }
-        }
-      } catch (error) {
-        console.error('Regular token verification failed:', error);
-
-        // Try to verify as a temporary token
-        try {
-          const decoded = jwt.verify(token, TEMP_JWT_SECRET);
-          if (decoded.isTemporary) {
-            userId = decoded.id;
-            username = decoded.username;
-            isTemporary = true;
-
-            // Emit the temporary authentication event
-            socket.emit('authenticateTemp', token);
-            return; // Exit early as we're handling this as a temp token
-          } else {
-            // Not a valid temporary token either
-            userId = null;
-            username = null;
-          }
-        } catch (tempError) {
-          console.error('Temporary token verification failed:', tempError);
-          userId = null;
-          username = null;
-        }
-      }
-    }
-
-    if (!userId || !username) {
-      socket.emit('authenticationFailure');
-      return;
-    }
-
-    // Store the userId in the socket object for future reference
-    socket.userId = userId;
-    socket.username = username;
-    socket.isTemporary = isTemporary;
-    // Update the onlineUsers map
-    onlineUsers.set(userId, { 
-      id: userId, 
-      username, 
-      cursorSkin: 'default', 
-      isTemporary,
-      lastActivity: Date.now() 
-    });
-
-    // Send the authentication result back to the client
-    socket.emit('authenticationResult', { userId, username, isTemporary, userData });
-
-    // Emit initial data to the authenticated user
-    socket.emit('updateRecentMessages', recentMessages);
-    socket.emit('updateCount', clickCount);
-    socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-      user.username,
-      { cursorSkin: user.cursorSkin }
-    ])));
-  });
-
-
-  socket.on('setTempAccount', (username, equippedCursor) => {
-    if (username) {
-      userId = crypto.randomBytes(16).toString('hex');
-      socket.userId = userId;
-      socket.username = username;
-      onlineUsers.set(userId, { 
-        username, 
-        cursorSkin: equippedCursor ? equippedCursor : 'default', 
-        isTemporary: true,
-        lastActivity: Date.now() 
-      });
-      socket.emit('tempAccResult');
-    } else {
-      userId = crypto.randomBytes(16).toString('hex');
-      username = generateUniqueUsername();
-      socket.userId = userId;
-      socket.username = username;
-      onlineUsers.set(userId, { 
-        username, 
-        cursorSkin: 'default', 
-        isTemporary: true,
-        lastActivity: Date.now() 
-      });
-      socket.emit('tempAccResult', username);
-    }
-    socket.emit('updateRecentMessages', recentMessages);
-    socket.emit('updateCount', clickCount);
-    socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-      user.username,
-      { cursorSkin: user.cursorSkin }
-    ])));
-  })
-
-
-
-  socket.on('setUsername', (newUsername) => {
-    if (isUsernameTaken(newUsername)) {
-      socket.emit('usernameError', 'Username already taken');
-    } else {
-      const user = onlineUsers.get(socket.userId);
-      if (user) {
-        user.username = newUsername;
-        onlineUsers.set(socket.userId, user);
-
-        // Update the token with the new username
-        const newToken = jwt.sign({ id: socket.userId, username: newUsername }, JWT_SECRET, { expiresIn: '30d' });
-        socket.emit('authentication', { token: newToken, userId: socket.userId, username: newUsername });
-
-        io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-      }
-    }
-  });
-
-  socket.on('cursorMove', ({ x, y, username }) => {
-    // Update the user's last activity time
-    if (socket.userId && onlineUsers.has(socket.userId)) {
-      const user = onlineUsers.get(socket.userId);
-      user.lastActivity = Date.now();
-      onlineUsers.set(socket.userId, user);
-    }
-    cursors[username] = { x, y };
-    io.emit('updateCursors', cursors);
-  });
-
-
-  socket.on('inviteToTeam', (inviteeId) => {
-    io.to(inviteeId).emit('teamInvite', socket.userId);
-  });
-
-  socket.on('acceptTeamInvite', (inviterId) => {
-    let team;
-    if (teams.has(inviterId)) {
-      team = teams.get(inviterId);
-      team.members.push(socket.userId);
-    } else {
-      team = { members: [inviterId, socket.userId] };
-      teams.set(inviterId, team);
-    }
-    team.members.forEach(memberId => {
-      io.to(memberId).emit('teamUpdate', team);
-    });
-  });
-
-  socket.on('chat message', (data) => {
-    console.log(`User ${data.username} sent a message: ${data.message}`);
-    const message = {
-      username: data.username,
-      message: data.message,
-      timestamp: Date.now()
-    };
-    addRecentMessage(message);
-    io.emit('chat message', message);
-  });
-
-  socket.on('leaveTeam', () => {
-    for (let [teamId, team] of teams) {
-      const index = team.members.indexOf(socket.userId);
-      if (index !== -1) {
-        team.members.splice(index, 1);
-        if (team.members.length === 1) {
-          teams.delete(teamId);
-          io.to(team.members[0]).emit('teamUpdate', null);
-        } else {
-          team.members.forEach(memberId => {
-            io.to(memberId).emit('teamUpdate', team);
-          });
-        }
-        break;
-      }
-    }
-  });
-
-  socket.on('changeCursorSkin', (newSkin) => {
-    const user = onlineUsers.get(socket.userId);
-    if (user) {
-      user.cursorSkin = newSkin;
-      onlineUsers.set(socket.userId, user);
-      io.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-        user.username,
-        { cursorSkin: user.cursorSkin }
-      ])));
-    }
-  });
-
-  socket.on('incrementCount', (clickValue) => {
-    clickCount += 1;
-    clicks.push(Date.now());
-
-    for (let [teamId, team] of teams) {
-      if (team.members.includes(socket.userId)) {
-        const sharedClickValue = clickValue * 0.1;
-        team.members.forEach(memberId => {
-          if (memberId !== socket.userId) {
-            io.to(memberId).emit('teamClickBonus', sharedClickValue);
-          }
-        });
-        break;
-      }
-    }
-
-    io.emit('updateCount', clickCount);
-    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected', socket.id);
-    onlineUsers.delete(socket.userId);
-    delete cursors[socket.username];
-    updateAllUsers();
-
-    for (let [teamId, team] of teams) {
-      const index = team.members.indexOf(socket.userId);
-      if (index !== -1) {
-        team.members.splice(index, 1);
-        if (team.members.length === 1) {
-          teams.delete(teamId);
-          io.to(team.members[0]).emit('teamUpdate', null);
-        } else if (team.members.length > 1) {
-          team.members.forEach(memberId => {
-            io.to(memberId).emit('teamUpdate', team);
-          });
-        }
-        break;
-      }
-    }
-  });
-
-  socket.on('createPermanentAccount', async (data) => {
-    const { username, email, password } = data;
-    const userId = socket.userId;
-
-    if (!isDevelopment) {
-      try {
-        // Check if username or email already exists
-        const existingUser = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
-        if (existingUser.rows.length > 0) {
-          socket.emit('accountCreationError', 'Username or email already exists');
-          return;
-        }
-
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Insert the new user into the database
-        const newUser = await db.query(
-          'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING *',
-          [userId, username, email, hashedPassword]
-        );
-
-        // Update the user's data in the onlineUsers map
-        const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
-        onlineUsers.set(userId, updatedUser);
-
-        // Generate a new token for the permanent account
-        const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
-
-        // Send the new authentication data back to the client
-        socket.emit('accountCreated', { token, userId, username, userData: newUser.rows[0] });
-
-        // Update all clients with the new user list
-        io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-      } catch (error) {
-        console.error('Error creating permanent account:', error);
-        socket.emit('accountCreationError', 'An error occurred while creating the account');
-      }
-    } else {
-      // In development mode, simulate account creation
-      const updatedUser = { id: userId, username, cursorSkin: 'default', isTemporary: false };
-      onlineUsers.set(userId, updatedUser);
-      const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '30d' });
-      socket.emit('accountCreated', { token, userId, username, userData: { id: userId, username, email } });
-      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-    }
-  });
-
-  socket.on('createTempUser', async () => {
-    try {
-      // Generate a unique ID and username for the temporary user
-      const tempUserId = crypto.randomBytes(16).toString('hex');
-      const tempUsername = generateUniqueUsername();
-
-      // Create a JWT token that expires in 2 weeks (14 days)
-      const tempToken = jwt.sign(
-        { 
-          id: tempUserId, 
-          username: tempUsername,
-          isTemporary: true 
-        },
-        TEMP_JWT_SECRET,
-        { expiresIn: '14d' }
-      );
-
-      // Store user in the database if not in development mode
-      if (!isDevelopment && db) {
-        try {
-          // Insert into temp_users table
-          await db.query(
-            'INSERT INTO temp_users (id, username) VALUES ($1, $2)',
-            [tempUserId, tempUsername]
-          );
-
-          // Create initial progress record
-          await db.query(
-            'INSERT INTO progress (temp_user_id, total_clicks) VALUES ($1, 0)',
-            [tempUserId]
-          );
-        } catch (dbError) {
-          console.error('Error storing temporary user in database:', dbError);
-          // Continue anyway, as we can still create a temporary user in memory
-        }
-      }
-
-      // Store the user info in the socket and online users map
-      socket.userId = tempUserId;
-      socket.username = tempUsername;
-      socket.isTemporary = true;
-
-      onlineUsers.set(tempUserId, { 
-        id: tempUserId, 
-        username: tempUsername, 
-        cursorSkin: 'default', 
-        isTemporary: true,
-        lastActivity: Date.now() 
-      });
-
-      // Send the token and user info back to the client
-      socket.emit('tempUserCreated', {
-        tempUserId,
-        tempUsername,
-        tempToken
-      });
-
-      // Send initial data to the new user
-      socket.emit('updateRecentMessages', recentMessages);
-      socket.emit('updateCount', clickCount);
-      socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-        user.username,
-        { cursorSkin: user.cursorSkin }
-      ])));
-
-      // Update all clients with the new user list
-      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-
-      console.log(`Created temporary user: ${tempUsername} (${tempUserId})`);
-    } catch (error) {
-      console.error('Error creating temporary user:', error);
-      socket.emit('error', 'Failed to create temporary user');
-    }
-  });
-
-  socket.on('authenticateTemp', async (tempToken) => {
-    try {
-      // Verify the token
-      const decoded = jwt.verify(tempToken, TEMP_JWT_SECRET);
-
-      if (!decoded.isTemporary) {
-        throw new Error('Not a temporary user token');
-      }
-
-      const tempUserId = decoded.id;
-      const tempUsername = decoded.username;
-
-      // Check if the user exists in the database (if not in development mode)
-      let gameData = {};
-      if (!isDevelopment && db) {
-        try {
-          // Check if temp user exists
-          const userResult = await db.query(
-            'SELECT * FROM temp_users WHERE id = $1',
-            [tempUserId]
-          );
-
-          if (userResult.rows.length === 0) {
-            // User not found in database, create a new one
-            throw new Error('Temporary user not found in database');
-          }
-
-          // Update last activity timestamp
-          await db.query(
-            'UPDATE temp_users SET last_activity = CURRENT_TIMESTAMP WHERE id = $1',
-            [tempUserId]
-          );
-
-          // Get user progress
-          const progressResult = await db.query(
-            'SELECT * FROM progress WHERE temp_user_id = $1',
-            [tempUserId]
-          );
-
-          if (progressResult.rows.length > 0) {
-            const progress = progressResult.rows[0];
-            gameData = {
-              totalClicks: progress.total_clicks || 0,
-              naturalClicks: progress.natural_clicks || 0,
-              bestCPS: progress.best_cps || 0,
-              flatClickBonus: progress.flat_click_bonus || 0,
-              percentageClickBonus: progress.percentage_click_bonus || 1,
-              flatAutoClicker: progress.flat_auto_clicker || 0,
-              percentAutoClicker: progress.percent_auto_clicker || 0,
-              unlockables: progress.unlockables || [0, 0, 0, 0, 0],
-              equippedCursor: 'default'
-            };
-          }
-        } catch (dbError) {
-          console.error('Database error during temp authentication:', dbError);
-          // Continue with memory-only user
-        }
-      }
-
-      // Store the user info in the socket and online users map
-      socket.userId = tempUserId;
-      socket.username = tempUsername;
-      socket.isTemporary = true;
-
-      onlineUsers.set(tempUserId, { 
-        id: tempUserId, 
-        username: tempUsername, 
-        cursorSkin: gameData.equippedCursor || 'default', 
-        isTemporary: true,
-        lastActivity: Date.now() 
-      });
-
-      // Send success response with user info and game data
-      socket.emit('tempAuthSuccess', {
-        tempUserId,
-        tempUsername,
-        gameData
-      });
-
-      // Send initial data to the authenticated user
-      socket.emit('updateRecentMessages', recentMessages);
-      socket.emit('updateCount', clickCount);
-      socket.emit('updateUserSkins', Object.fromEntries(Array.from(onlineUsers.values()).map(user => [
-        user.username,
-        { cursorSkin: user.cursorSkin }
-      ])));
-
-      // Update all clients with the new user list
-      io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-
-      console.log(`Authenticated temporary user: ${tempUsername} (${tempUserId})`);
-    } catch (error) {
-      console.error('Error authenticating temporary user:', error);
-      socket.emit('tempAuthFailure');
-      // Create a new temporary user as fallback
-      socket.emit('createTempUser');
-    }
-  });
-
-socket.on('upgradeTemp', async ({ tempUserId, email, password, username }) => {
-  try {
-    // Verify this is the same user who owns the temp account
-    if (!socket.isTemporary || socket.userId !== tempUserId) {
-      throw new Error('Unauthorized upgrade attempt');
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    let newUserId;
-
-    if (!isDevelopment && db) {
-      // Start a transaction
-      const client = await db.connect();
-      try {
-        await client.query('BEGIN');
-
-        // Create the permanent user
-        const userResult = await client.query(
-          'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
-          [username || socket.username, email, hashedPassword]
-        );
-
-        newUserId = userResult.rows[0].id;
-
-        // Transfer progress from temp user to permanent user
-        await client.query(
-          `UPDATE progress 
-           SET user_id = $1, temp_user_id = NULL 
-           WHERE temp_user_id = $2`,
-          [newUserId, tempUserId]
-        );
-
-        // Delete the temporary user
-        await client.query('DELETE FROM temp_users WHERE id = $1', [tempUserId]);
-
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
-      } finally {
-        client.release();
-      }
-    } else {
-      // In development mode, just generate a new ID
-      newUserId = crypto.randomBytes(16).toString('hex');
-    }
-
-    // Generate a permanent token
-    const token = jwt.sign(
-      { id: newUserId, username: username || socket.username },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    // Update socket data
-    socket.userId = newUserId;
-    socket.username = username || socket.username;
-    socket.isTemporary = false;
-
-    // Update online users map
-    onlineUsers.set(newUserId, { 
-      id: newUserId, 
-      username: socket.username, 
-      cursorSkin: onlineUsers.get(tempUserId)?.cursorSkin || 'default', 
-      isTemporary: false,
-      lastActivity: Date.now() 
-    });
-    onlineUsers.delete(tempUserId);
-
-    // Send the token to the client
-    socket.emit('upgradeSuccess', {
-      token,
-      userId: newUserId,
-      username: socket.username
-    });
-
-    // Update online users list
-    io.emit('updateOnlineUsers', Array.from(onlineUsers.values()));
-
-    console.log(`Upgraded temporary user ${tempUserId} to permanent user ${newUserId}`);
-  } catch (error) {
-    console.error('Error upgrading temporary account:', error);
-    socket.emit('upgradeFailure', error.message);
-  }
-});
-});
-// Data persistence functions
-function saveServerData() {
-  const data = {
-    clickCount: clickCount,
-    timestamp: new Date().toISOString()
-  };
-
-  const filePath = path.join(__dirname, 'serverData.json');
-
-  fs.writeFile(filePath, JSON.stringify(data, null, 2), (err) => {
-    if (err) {
-      console.error('Error saving server data:', err);
-    } else {
-      console.log('Server data saved successfully');
-    }
-  });
-}
-
-function loadServerData() {
-  const filePath = path.join(__dirname, 'serverData.json');
-
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) {
-      if (err.code === 'ENOENT') {
-        console.log('No saved data found. Starting with initial values.');
-      } else {
-        console.error('Error reading server data:', err);
-      }
-    } else {
-      try {
-        const parsedData = JSON.parse(data);
-        clickCount = parsedData.clickCount;
-        console.log('Server data loaded successfully');
-      } catch (parseErr) {
-        console.error('Error parsing server data:', parseErr);
-      }
-    }
-  });
-}
-
-async function loadUserData(userId) {
-  try {
-    // Load user progress from the database
-    const result = await db.query('SELECT * FROM progress WHERE user_id = $1', [userId]);
-    if (result.rows.length > 0) {
-      const userProgress = result.rows[0];
-      // Update relevant variables with user progress
-      // For example:
-      // clickCount = userProgress.total_clicks;
-      // You might need to adjust this based on your actual database schema
-    }
-  } catch (error) {
-    console.error('Error loading user data:', error);
-  }
-}
-
-// Initialization and intervals
-loadServerData();
-setInterval(updateGlobalCPS, 100);
-setInterval(updateAllUsers, 5000);
-// Set up interval to clean up inactive users
-setInterval(cleanupInactiveUsers, 10000); // Run every 10 seconds
-setInterval(syncTotalClicksWithDB, 30000);
-setInterval(syncUserClicksWithDB, 10000);
-setInterval(saveServerData, 60 * 60 * 1000);
-
-
-
-// Authentication routes
-app.post('/api/register', async (req, res) => {
-  const { tempUserId, username, password, email } = req.body;
-
-  try {
-    // Check if username or email already exists
-    const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ error: 'Username or email already exists' });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert the new user into the database
-    const result = await db.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
-      [username, email, hashedPassword]
-    );
-
-    const newUserId = result.rows[0].id;
-
-    if (tempUserId) {
-      await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
-    }
-    // Create a new token for the registered user
-    const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
-
-    res.json({ token, userId: newUserId, username });
-    console.log(`User ${username} registered successfully`);
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'An error occurred during registration' });
-  }
+  console.log(`[connect] ${socket.id}`);
+ 
+  registerAuthHandlers(socket, io, sharedState);
+  registerChatHandlers(socket, io, sharedState);
+  registerGameHandlers(socket, io, sharedState);
+  registerTeamHandlers(socket, io, sharedState);
+  registerAccountHandlers(socket, io, sharedState);
+  registerDisconnectHandler(socket, io, sharedState);
 });
 
 
 
-app.post('/api/register', async (req, res) => {
-  console.log('Received registration request:', req.body);
-  const { tempUserId, username, password, email } = req.body;
+// function updateGlobalCPS() {
+//     const now = Date.now();
+//     clicks = clicks.filter(click => now - click < 1010);
+//     const globalCPS = clicks.length;
+//     io.emit('updateGlobalCPS', globalCPS);
+// }
 
-  console.log('Extracted data:', { tempUserId, username, password: password ? '[REDACTED]' : undefined, email });
 
-  // Check if all required fields are provided
-  if (!username || !password || !email) {
-    console.log('Missing required fields');
-    return res.status(400).json({ error: 'All fields are required' });
-  }
 
-  // Check if username is not empty
-  if (username.trim() === '') {
-    console.log('Empty username provided');
-    return res.status(400).json({ error: 'Username cannot be empty' });
-  }
+// function generateUniqueUsername() {
+//   let username;
+//   do {
+//     const randomString = crypto.randomBytes(4).toString('hex');
+//     username = `User_${randomString}`;
+//   } while (isUsernameTaken(username));
+//   return username;
+// }
 
-  try {
-    // Check if username or email already exists
-    const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
-    if (userCheck.rows.length > 0) {
-      console.log('Username or email already exists');
-      return res.status(400).json({ error: 'Username or email already exists' });
-    }
+// function isUsernameTaken(username) {
+//   return Array.from(onlineUsers.values()).some(user => user.username === username);
+// }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+// // clean up inactive users
+// function cleanupInactiveUsers() {
+//   const now = Date.now();
+//   for (const [userId, user] of onlineUsers.entries()) {
+//     if (!user.lastActivity || now - user.lastActivity > 30000) { // 30 seconds of inactivity
+//       console.log(`Removing inactive user: ${user.username}`);
+//       onlineUsers.delete(userId);
+//       delete cursors[user.username];
+//     }
+//   }
+//   updateAllUsers();
+// }
 
-    console.log('Inserting new user into database');
-    // Insert the new user into the database
-    const result = await db.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
-      [username, email, hashedPassword]
-    );
 
-    const newUserId = result.rows[0].id;
-    console.log('New user created with ID:', newUserId);
 
-    // Transfer progress from temp user to new user
-    if (tempUserId) {
-      console.log('Transferring progress from temp user:', tempUserId);
-      await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
-    }
+// async function updateUserClicksInDB(userId, isTemporary, naturalClicks, totalClicks, bestCPS) {
+//   if (isDevelopment) {
+//     console.log('Development mode: Skipping user clicks update');
+//     return;
+//   }
 
-    // Create a new token for the registered user
-    const token = jwt.sign({ id: newUserId, username }, process.env.JWT_SECRET, { expiresIn: '30d' });
+//   try {
+//     // Determine which ID field to use based on whether the user is temporary
+//     const idField = isTemporary ? 'temp_user_id' : 'user_id';
 
-    console.log('Registration successful');
-    res.json({ token, userId: newUserId, username });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'An error occurred during registration', details: error.message });
-  }
-});
+//     // Check if user already has a progress record
+//     const checkResult = await db.query(
+//       `SELECT id FROM progress WHERE ${idField} = $1`,
+//       [userId]
+//     );
+
+//     if (checkResult.rows.length > 0) {
+//       // Update existing record
+//       await db.query(
+//         `UPDATE progress 
+//          SET natural_clicks = natural_clicks + $1, 
+//              total_clicks = $2,
+//              best_cps = GREATEST(best_cps, $3),
+//              last_updated = CURRENT_TIMESTAMP
+//          WHERE ${idField} = $4`,
+//         [naturalClicks, totalClicks, bestCPS, userId]
+//       );
+//     } else {
+//       console.log(`error creating new progress record for user ${userId}`);
+//       return; // Don't create a new record if the user doesn't exist
+      
+//       // await db.query(
+//       //   `INSERT INTO progress (${idField}, natural_clicks, total_clicks, best_cps)
+//       //    VALUES ($1, $2, $3, $4)`,
+//       //   [userId, naturalClicks, totalClicks, bestCPS]
+//       // );
+//     }
+
+//     console.log(`Updated clicks for user ${userId}: +${naturalClicks} natural, ${totalClicks} total`);
+//   } catch (error) {
+//     console.error(`Error updating clicks for user ${userId}:`, error);
+//   }
+// }
+
+// async function syncUserClicksWithDB() {
+//   if (isDevelopment) {
+//     console.log('Development mode: Skipping user clicks sync');
+//     return;
+//   }
+
+//   const now = Date.now();
+
+//   // Iterate through all users with click data
+//   for (const [userId, userData] of userClicks.entries()) {
+//     // Only sync if there are new clicks or it's been more than 30 seconds since last sync
+//     if (userData.naturalClicks > 0 || now - userData.lastSync > 30000) {
+//       const user = onlineUsers.get(userId);
+
+//       if (user) {
+//         try {
+//           // Determine which ID field to use based on whether the user is temporary
+//           const idField = user.isTemporary ? 'temp_user_id' : 'user_id';
+
+//           // Check if user already has a progress record
+//           const checkResult = await db.query(
+//             `SELECT id FROM progress WHERE ${idField} = $1`,
+//             [userId]
+//           );
+
+//           if (checkResult.rows.length > 0) {
+//             // Update existing record
+//             await db.query(
+//               `UPDATE progress 
+//                SET natural_clicks = natural_clicks + $1, 
+//                    total_clicks = $2,
+//                    last_updated = CURRENT_TIMESTAMP
+//                WHERE ${idField} = $3`,
+//               [userData.naturalClicks, userData.totalClicks, userId]
+//             );
+//           } else {
+//             // Create new record
+//             await db.query(
+//               `INSERT INTO progress (${idField}, natural_clicks, total_clicks)
+//                VALUES ($1, $2, $3)`,
+//               [userId, userData.naturalClicks, userData.totalClicks]
+//             );
+//           }
+
+//           // Reset natural clicks counter and update last sync time
+//           userData.naturalClicks = 0;
+//           userData.lastSync = now;
+//           userClicks.set(userId, userData);
+
+//           console.log(`Synced clicks for user ${userId}: ${userData.naturalClicks} natural, ${userData.totalClicks} total`);
+//         } catch (error) {
+//           console.error(`Error syncing clicks for user ${userId}:`, error);
+//         }
+//       }
+//     }
+//   }
+// }
+
+
+
+
+
+// // Data persistence functions
+// function saveServerData() {
+//   const data = {
+//     clickCount: clickCount,
+//     timestamp: new Date().toISOString()
+//   };
+
+//   const filePath = path.join(__dirname, 'serverData.json');
+
+//   fs.writeFile(filePath, JSON.stringify(data, null, 2), (err) => {
+//     if (err) {
+//       console.error('Error saving server data:', err);
+//     } else {
+//       console.log('Server data saved successfully');
+//     }
+//   });
+// }
+
+
+
+// function loadServerData() {
+//   const filePath = path.join(__dirname, 'serverData.json');
+
+//   fs.readFile(filePath, 'utf8', (err, data) => {
+//     if (err) {
+//       if (err.code === 'ENOENT') {
+//         console.log('No saved data found. Starting with initial values.');
+//       } else {
+//         console.error('Error reading server data:', err);
+//       }
+//     } else {
+//       try {
+//         const parsedData = JSON.parse(data);
+//         clickCount = parsedData.clickCount;
+//         console.log('Server data loaded successfully');
+//       } catch (parseErr) {
+//         console.error('Error parsing server data:', parseErr);
+//       }
+//     }
+//   });
+// }
+
+
+// async function loadUserProgress(socket, userId, isTemporary) {
+//   if (isDevelopment) {
+//     console.log('Development mode: Skipping user progress load');
+//     return;
+//   }
+
+//   try {
+//     // Determine which ID field to use
+//     const idField = isTemporary ? 'temp_user_id' : 'user_id';
+
+//     // Get user progress
+//     const progressResult = await db.query(
+//       `SELECT * FROM progress WHERE ${idField} = $1`,
+//       [userId]
+//     );
+
+//     if (progressResult.rows.length > 0) {
+//       const progress = progressResult.rows[0];
+
+//       // Initialize user clicks tracking
+//       userClicks.set(userId, {
+//         naturalClicks: progress.naturalClicks || 0,
+//         totalClicks: progress.total_clicks || 0,
+//         clickValue: 1, // Default value, will be updated by client
+//         lastSync: Date.now()
+//       });
+
+//       // Send progress data to the client
+//       socket.emit('loadProgress', {
+//         totalClicks: progress.total_clicks || 0,
+//         naturalClicks: progress.natural_clicks || 0,
+//         bestCPS: progress.best_cps || 0,
+//         flatClickBonus: progress.flat_click_bonus || 0,
+//         percentageClickBonus: progress.percentage_click_bonus || 1,
+//         flatAutoClicker: progress.flat_auto_clicker || 0,
+//         percentAutoClicker: progress.percent_auto_clicker || 0,
+//         unlockables: progress.unlockables || [0, 0, 0, 0, 0]
+//       });
+
+//       console.log(`Loaded progress for user ${userId}`);
+//     }
+//   } catch (error) {
+//     console.error(`Error loading progress for user ${userId}:`, error);
+//   }
+// }
+// // Initialization and intervals
+// loadServerData();
+// setInterval(updateGlobalCPS, 100);
+// setInterval(updateAllUsers, 5000);
+// // Set up interval to clean up inactive users
+// setInterval(cleanupInactiveUsers, 10000); // Run every 10 seconds
+// // setInterval(syncTotalClicksWithDB, 30000);
+// setInterval(syncUserClicksWithDB, 10000);
+// setInterval(saveServerData, 60 * 60 * 1000);
+
+
+
+// // Authentication routes
+// // app.post('/api/register', async (req, res) => {
+// //   const { tempUserId, username, password, email } = req.body;
+
+// //   try {
+// //     // Check if username or email already exists
+// //     const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+// //     if (userCheck.rows.length > 0) {
+// //       return res.status(400).json({ error: 'Username or email already exists' });
+// //     }
+
+// //     // Hash the password
+// //     const hashedPassword = await bcrypt.hash(password, 10);
+
+// //     // Insert the new user into the database
+// //     const result = await db.query(
+// //       'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
+// //       [username, email, hashedPassword]
+// //     );
+
+// //     const newUserId = result.rows[0].id;
+
+// //     if (tempUserId) {
+// //       await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
+// //     }
+// //     // Create a new token for the registered user
+// //     const token = jwt.sign({ id: newUserId, username }, JWT_SECRET, { expiresIn: '30d' });
+
+// //     res.json({ token, userId: newUserId, username });
+// //     console.log(`User ${username} registered successfully`);
+// //   } catch (error) {
+// //     console.error('Registration error:', error);
+// //     res.status(500).json({ error: 'An error occurred during registration' });
+// //   }
+// // });
+
+
+
+// app.post('/api/register', async (req, res) => {
+//   console.log('Received registration request:', req.body);
+//   const { tempUserId, username, password, email } = req.body;
+
+//   console.log('Extracted data:', { tempUserId, username, password: password ? '[REDACTED]' : undefined, email });
+
+//   // Check if all required fields are provided
+//   if (!username || !password || !email) {
+//     console.log('Missing required fields');
+//     return res.status(400).json({ error: 'All fields are required' });
+//   }
+
+//   // Check if username is not empty
+//   if (username.trim() === '') {
+//     console.log('Empty username provided');
+//     return res.status(400).json({ error: 'Username cannot be empty' });
+//   }
+
+//   try {
+//     // Check if username or email already exists
+//     const userCheck = await db.query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
+//     if (userCheck.rows.length > 0) {
+//       console.log('Username or email already exists');
+//       return res.status(400).json({ error: 'Username or email already exists' });
+//     }
+
+//     // Hash the password
+//     const hashedPassword = await bcrypt.hash(password, 10);
+
+//     console.log('Inserting new user into database');
+//     // Insert the new user into the database
+//     const result = await db.query(
+//       'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
+//       [username, email, hashedPassword]
+//     );
+
+//     const newUserId = result.rows[0].id;
+//     console.log('New user created with ID:', newUserId);
+
+//     // Transfer progress from temp user to new user
+//     if (tempUserId) {
+//       console.log('Transferring progress from temp user:', tempUserId);
+//       await db.query('UPDATE progress SET user_id = $1 WHERE user_id = $2', [newUserId, tempUserId]);
+//     }
+
+//     // Create a new token for the registered user
+//     const token = jwt.sign({ id: newUserId, username }, process.env.JWT_SECRET, { expiresIn: '30d' });
+
+//     console.log('Registration successful');
+//     res.json({ token, userId: newUserId, username });
+//   } catch (error) {
+//     console.error('Registration error:', error);
+//     res.status(500).json({ error: 'An error occurred during registration', details: error.message });
+//   }
+// });
+
 
 
 
@@ -874,4 +474,3 @@ app.post('/api/register', async (req, res) => {
 // Start the server
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-

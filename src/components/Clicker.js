@@ -21,7 +21,7 @@ import { useSocket } from '../contexts/SocketContext';
  */
 function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, bestCPS: propBestCPS }) {
   const { socket, userId, username, cursors, setUsername } = useSocket();
-  
+
   const [clientCPS, setClientCPS] = useState(0);
   const clicksRef = useRef([]);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -39,7 +39,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
 
   const [listeningForKey, setListeningForKey] = useState(false);
   const [selectedKey, setSelectedKey] = useState(null);
-  const [keyPressed, setKeyPressed] = useState(false); // Add state to track key press
+  const [keyPressed, setKeyPressed] = useState(false); // state to track key press
 
   const calculateClickValue = useCallback(() => {
     const baseClickValue = 1;
@@ -78,7 +78,9 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
   };
 
   const processClick = useCallback((clickValue) => {
+    // Increment the global click count
     socket.emit('incrementCount', clickValue);
+
     const now = Date.now();
     clicksRef.current.push(now);
     const recentClicks = clicksRef.current.filter(click => now - click < 1000);
@@ -97,7 +99,7 @@ function Clicker({ onUnlock, totalClicks, flatClickBonus, percentageClickBonus, 
         stopTimer();
       }
     }
-  }, [totalClicks, onUnlock, clientCPS, propBestCPS, isTimerRunning, timerDuration, stopTimer]);
+  }, [totalClicks, onUnlock, clientCPS, propBestCPS, isTimerRunning, timerDuration, stopTimer, socket]);
 
   const handleClick = useCallback(() => {
     const clickValue = calculateClickValue();
