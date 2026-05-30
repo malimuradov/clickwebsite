@@ -1,63 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500&display=swap');
+
+/* ─── Global design tokens ───────────────────────────────────────────────────
+   Defined once here. Navbar.css and Clicker.css both declare the same :root
+   block so they work standalone; the browser merges them cleanly.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg-deep:       #080a0f;
+  --bg-panel:      #0d1117;
+  --bg-card:       #161b22;
+  --border:        #21262d;
+  --border-bright: #30363d;
+
+  --accent-cyan:   #00d4ff;
+  --accent-red:    #ff3366;
+  --accent-gold:   #ffd700;
+
+  --text-primary:  #e6edf3;
+  --text-muted:    #7d8590;
+  --text-dim:      #484f58;
+
+  --navbar-h:      60px;
+  --panel-width:   260px;
+  --target-size:   300px;
+
+  --font-display:  'Orbitron', monospace;
+  --font-mono:     'JetBrains Mono', monospace;
+  --font-body:     'DM Sans', sans-serif;
+}
+
+/* ─── Reset & base ──────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ─── App shell ─────────────────────────────────────────────────────────────── */
 .App {
-  text-align: center;
-  position: relative;
-  min-height: 100vh;
-  touch-action: manipulation;
-}
-
-.HideCursor * {
-  cursor: none !important;
-}
-
-.HideCursor {
-  cursor:none;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  background-color: var(--bg-deep);
+  /* Subtle dot grid across the whole page */
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-attachment: fixed;
 }
 
-.App-link {
-  color: #61dafb;
+.App.HideCursor {
+  cursor: none;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-
+/* Content wrapper (direct child of .App) */
 .content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The main game area between Navbar and UnlockedContent */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Let Clicker.jsx handle its own internal layout */
+  padding: 0;
   position: relative;
-  pointer-events: none;
 }
 
-.content > *:not(.cursor-overlay) {
-  pointer-events: auto;
+/* ─── Scrollbar (Chrome/Edge/Safari) ────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb  { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: var(--border-bright) var(--bg-deep); }
+
+/* ─── Global utility classes ────────────────────────────────────────────────── */
+
+/* Monospace number display */
+.mono { font-family: var(--font-mono); }
+
+/* Invisible but accessible (for screen readers) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.cursor-overlay {
-  pointer-events: none !important;
+/* Focus ring (keyboard nav) */
+:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

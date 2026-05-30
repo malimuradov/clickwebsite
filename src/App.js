@@ -10,6 +10,8 @@ import { cursorSkins } from './data/cursorData';
 
 import { useSocket } from './contexts/SocketContext';
 
+import ConnectionStatus from './components/ConnectionStatus';
+
 function App() {
   // Auth
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
@@ -32,7 +34,7 @@ function App() {
   const [percentAutoClicker, setPercentAutoClicker] = useState(0);
 
   // Unlockables
-  const [chatUnlocked, setChatUnlocked] = useState(false);
+  // const [chatUnlocked, setChatUnlocked] = useState(false);
 
   // Cursor customization
   const [unlockedCursorSkins, setUnlockedCursorSkins] = useState(['default']);
@@ -131,7 +133,7 @@ function App() {
         percentageClickBonus,
         flatAutoClicker,
         percentAutoClicker,
-        chatUnlocked,
+        // chatUnlocked,
         unlockedCursorSkins,
         equippedCursorSkin,
         equippedCursorEffect,
@@ -146,7 +148,9 @@ function App() {
         localStorage.setItem('gameState', JSON.stringify(gameState));
       }
     }
-  }, [isLoaded, totalClicks, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, chatUnlocked, unlockedCursorSkins, equippedCursorSkin, equippedCursorEffect, equippedCursorAbility, username, team, teamInvites, isTemporaryAccount]);
+  }, [isLoaded, totalClicks, bestCPS, clickMultiplier, flatClickBonus, percentageClickBonus, flatAutoClicker, percentAutoClicker, 
+    // chatUnlocked, 
+    unlockedCursorSkins, equippedCursorSkin, equippedCursorEffect, equippedCursorAbility, username, team, teamInvites, isTemporaryAccount]);
 
   useEffect(() => {
     const storedData = localStorage.getItem('gameState');
@@ -160,7 +164,7 @@ function App() {
       setPercentageClickBonus(parsedData.percentageClickBonus || 1);
       setFlatAutoClicker(parsedData.flatAutoClicker || 0);
       setPercentAutoClicker(parsedData.percentAutoClicker || 0);
-      setChatUnlocked(parsedData.chatUnlocked || false);
+      // setChatUnlocked(parsedData.chatUnlocked || false);
       setUnlockedCursorSkins(parsedData.unlockedCursorSkins || ['default']);
       setEquippedCursorSkin(parsedData.equippedCursorSkin || 'default');
       setEquippedCursorEffect(parsedData.equippedCursorEffect || 'default');
@@ -314,9 +318,9 @@ function App() {
     localStorage.removeItem('tempAccountData');
   }, []);
 
-  const handleUnlockChat = useCallback(() => {
-    setChatUnlocked(true);
-  }, []);
+  // const handleUnlockChat = useCallback(() => {
+  //   setChatUnlocked(true);
+  // }, []);
 
   const handleGamble = useCallback((cost) => {
     if (totalClicks >= cost) {
@@ -340,6 +344,7 @@ function App() {
 
   return (
     <div className={`App ${equippedCursorSkin !== 'default' || hideCursor ? 'HideCursor' : ''}`} onMouseMove={handleMouseMove}>
+      <ConnectionStatus />
       <div className="content">
         <OnlineUsersProvider>
           <Navbar 
@@ -372,8 +377,8 @@ function App() {
               flatAutoClicker={flatAutoClicker}
               percentAutoClicker={percentAutoClicker}
               onGamble={handleGamble}
-              onUnlockChat={handleUnlockChat}
-              chatUnlocked={chatUnlocked}
+              // onUnlockChat={handleUnlockChat}
+              // chatUnlocked={chatUnlocked}
               onSendMessage={handleSendMessage}
               unlockedCursorSkins={unlockedCursorSkins}
               unlockedCursorAbilities={unlockedCursorAbilities}

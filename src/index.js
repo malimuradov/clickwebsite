@@ -12,7 +12,6 @@ root.render(
     <SocketProvider>
       <App />
       <footer>
-      <h3><a href="https://www.flaticon.com/free-icons/mouse-clicker" title="mouse clicker icons">Mouse clicker icons created by Andrean Prabowo - Flaticon</a></h3>
       </footer>
     </SocketProvider>
   </React.StrictMode>
